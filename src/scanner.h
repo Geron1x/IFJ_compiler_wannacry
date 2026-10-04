@@ -1,4 +1,4 @@
-//Compiler IFJ26 lang
+//Project: Implementace překladače imperativního jazyka IFJ26
 //Authors:
 //Artem Antonenko (xantona00)
 
@@ -16,8 +16,8 @@
 typedef union {
     char* identifier;
     char* string;
-    double number_float;
-    long long int number_int;
+    double numberFloat;
+    long long int numberInt;
 } Val;
 
 typedef enum {
@@ -75,10 +75,10 @@ typedef struct {
 
 typedef struct {
     int line;
-    int first_read;
+    int firstRead;
     FILE* stream;
 } Scanner;
 
-int get_token(Token*, Scanner*);
+int getToken(Token* token, Scanner* scanner);
 
 #endif //IFJ_SCANNER_H 
