@@ -1,6 +1,6 @@
 /**
  * 
- * Project: Compiler IFJ26 lang
+ * Project: Implementace překladače imperativního jazyka IFJ26.
  * 
  * @file scanner.h
  * @brief Lexical analyzer interface for the IFJ26 compiler.
