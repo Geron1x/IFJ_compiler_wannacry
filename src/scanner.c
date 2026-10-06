@@ -82,6 +82,8 @@ int getToken(Token* token, Scanner* scanner) {
     State state = STATE_START;
     token->line = scanner->line;
     int commentLevel = 0;
+    DynamicString attr;
+    strInit(&attr);
 
     while(true) {
         int c = fgetc(scanner->stream);
@@ -168,8 +170,16 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                if(c == '0') {
+                    strClear(&attr);
+                    strAppend(&attr, c);
+                    state = STATE_ZERO;
+                    break;
+                }
+
                 if(isdigit(c)) {
-                    token->value.numberInt = c - '0';
+                    strClear(&attr);
+                    strAppend(&attr,c);
                     state = STATE_INT_LITERAL;
                     break;
                 }
@@ -281,16 +291,171 @@ int getToken(Token* token, Scanner* scanner) {
                 }
                 break;
 
+            case STATE_ZERO:
+                if(c=='.'){
+                    strAppend(&attr, c);
+                    state = STATE_DOT;
+                    break;
+                } 
+
+                if(c=='e' || c =='E') {
+                    strAppend(&attr, c);
+                    state = STATE_EXP;
+                    break;
+                }
+
+                if(isdigit(c)) {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                ungetc(c, scanner->stream);
+                token->type = TYPE_INT_LITERAL;
+                token->value.numberInt = 0;
+                strFree(&attr);
+                return 0;
+
             case STATE_INT_LITERAL:
 
                 if(isdigit(c)) {
-                    token->value.numberInt = token->value.numberInt * 10 + (c - '0');
+                    strAppend(&attr, c);
+                    break;
+                }
+
+                if(c =='_') {
+                    state = STATE_INT_UNDERSCORE;
+                    break;
+                }
+
+                if(c =='.') {
+                    strAppend(&attr, c);
+                    state = STATE_DOT;
+                    break;
+                }
+
+                if(c =='e' || c == 'E') {
+                    strAppend(&attr, c);
+                    state = STATE_EXP;
                     break;
                 }
 
                 ungetc(c, scanner->stream);
                 token->type = TYPE_INT_LITERAL;
+                token->value.numberInt = strtoll(attr.data, NULL, 10);
+                strFree(&attr);
                 return 0;
+
+            case STATE_INT_UNDERSCORE:
+                if(isdigit(c)) {
+                    strAppend(&attr, c);
+                    state = STATE_INT_LITERAL;
+                    break;
+                }
+
+                strFree(&attr);
+                token->type = TYPE_ERROR;
+                return 1;
+            case STATE_DOT:
+                if(isdigit(c)) {
+                    strAppend(&attr, c);
+                    state = STATE_DOUBLE_LITERAL;
+                    break;
+                }
+                strFree(&attr);
+                token->type = TYPE_ERROR;
+                return 1;
+
+            case STATE_DOUBLE_LITERAL:
+                if(isdigit(c)) {
+                    strAppend(&attr, c);
+                    break;
+                }
+
+                if(c == '_') {
+                    state = STATE_DOUBLE_UNDERSCORE;
+                    break;
+                }
+
+                if(c =='e' || c == 'E'){
+                    strAppend(&attr, c);
+                    state = STATE_EXP;
+                    break;
+                }
+
+                ungetc(c, scanner->stream);
+                token->type = TYPE_DOUBLE_LITERAL;
+                token->value.numberFloat = strtod(attr.data, NULL);
+                strFree(&attr);
+                return 0;
+
+            case STATE_DOUBLE_UNDERSCORE:
+                if(isdigit(c)) {
+                    strAppend(&attr, c);
+                    state = STATE_DOUBLE_LITERAL;
+                    break;
+                }
+
+                strFree(&attr);
+                token->type = TYPE_ERROR;
+                return 1;
+
+            case STATE_EXP:
+                if(c == '+' || c =='-'){
+                    strAppend(&attr, c);
+                    state = STATE_EXP_SIGN;
+                    break;
+                }
+
+                if(isdigit(c)) {
+                    strAppend(&attr, c);
+                    state = STATE_EXP_LITERAL;
+                    break;
+                }
+
+                strFree(&attr);
+                token->type = TYPE_ERROR;
+                return 1;
+
+            case STATE_EXP_SIGN:
+                if(isdigit(c)) {
+                    strAppend(&attr, c);
+                    state = STATE_EXP_LITERAL;
+                    break;
+                }
+
+                strFree(&attr);
+                token->type = TYPE_ERROR;
+                return 1;
+
+
+            case STATE_EXP_LITERAL:
+                if(isdigit(c)){
+                    strAppend(&attr, c);
+                    break;
+                }
+
+                if(c == '_'){
+                    state = STATE_EXP_UNDERSCORE;
+                    break;
+                }
+
+                ungetc(c, scanner->stream);
+                token->type = TYPE_DOUBLE_LITERAL;
+                token->value.numberFloat = strtod(attr.data, NULL);
+                strFree(&attr);
+                return 0;
+
+            case STATE_EXP_UNDERSCORE:
+                if(isdigit(c)) {
+                    strAppend(&attr, c);
+                    state = STATE_EXP_LITERAL;
+                    break;
+                }
+
+                strFree(&attr);
+                token->type = TYPE_ERROR;
+                return 1;
 
         }
     }
