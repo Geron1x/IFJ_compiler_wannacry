@@ -78,6 +78,29 @@ void strClear(DynamicString *s) {
     }
 }
 
+typedef struct {
+    char *keyword;
+    Type type;
+} Keyword;
+
+Keyword Keywords[] = {
+    {"def", TYPE_DEF},
+    {"do", TYPE_DO},
+    {"Double", TYPE_DOUBLE},
+    {"else", TYPE_ELSE},
+    {"if", TYPE_IF},
+    {"import", TYPE_IMPORT},
+    {"Int", TYPE_INT},
+    {"return", TYPE_RETURN},
+    {"String", TYPE_STRING},
+    {"then", TYPE_THEN},
+    {"Unit", TYPE_UNIT},
+    {"val", TYPE_VAL},
+    {"var", TYPE_VAR},
+    {"while", TYPE_WHILE},
+    {NULL, 0}
+};
+
 int getToken(Token* token, Scanner* scanner) {
     State state = STATE_START;
     token->line = scanner->line;
@@ -181,6 +204,13 @@ int getToken(Token* token, Scanner* scanner) {
                     strClear(&attr);
                     strAppend(&attr,c);
                     state = STATE_INT_LITERAL;
+                    break;
+                }
+
+                if(isalpha(c) || c=='_'){
+                    strClear(&attr);
+                    strAppend(&attr,c);
+                    state = STATE_IDENTIFIER;
                     break;
                 }
 
@@ -456,6 +486,31 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 token->type = TYPE_ERROR;
                 return 1;
+
+            case STATE_IDENTIFIER:
+                if(isalnum(c) || c =='_'){
+                    strAppend(&attr, c);
+                    break;
+                    }
+                ungetc(c, scanner->stream);
+                token->type= TYPE_IDENTIFIER;
+
+                for(int i = 0; Keywords[i].keyword != NULL; i++) {
+                    if(strcmp(attr.data, Keywords[i].keyword) ==0){
+                        token->type = Keywords[i].type;
+                        break;
+                    }
+                }
+
+                if(token->type == TYPE_IDENTIFIER) {
+                    token->value.identifier = (char*)safeMalloc(attr.len +1);
+                    strcpy(token->value.identifier, attr.data);
+                }
+
+                strFree(&attr);
+                return 0;
+
+
 
         }
     }
