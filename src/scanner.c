@@ -21,7 +21,9 @@ typedef enum {
     STATE_EXP_LITERAL,
     STATE_EXP_UNDERSCORE,
     STATE_STRING,
-    STATE_STRING_ESC
+    STATE_STRING_ESC,
+    STATE_MULTILINE_STRING,
+    STATE_MULTILINE_WAIT_END
 } State;
 
 
@@ -108,7 +110,6 @@ int getToken(Token* token, Scanner* scanner) {
     token->line = scanner->line;
     int commentLevel = 0;
     DynamicString attr;
-    strInit(&attr);
 
     while(true) {
         int c = fgetc(scanner->stream);
@@ -127,11 +128,6 @@ int getToken(Token* token, Scanner* scanner) {
                     scanner->line++;
                     token->line = scanner->line;
                     token->type = TYPE_EOL;
-                    return 0;
-                }
-
-                if(c == '(') {
-                    token->type = TYPE_LEFT_PAREN;
                     return 0;
                 }
 
@@ -196,6 +192,7 @@ int getToken(Token* token, Scanner* scanner) {
                 }
 
                 if(c == '0') {
+                    strInit(&attr);
                     strClear(&attr);
                     strAppend(&attr, c);
                     state = STATE_ZERO;
@@ -203,13 +200,34 @@ int getToken(Token* token, Scanner* scanner) {
                 }
 
                 if(c == '"') {
+                    int c2 = fgetc(scanner->stream);
+                    if(c2 == '"'){
+                        int c3 = fgetc(scanner->stream);
+                        if(c3 == '"'){
+                            strInit(&attr);
+                            strClear(&attr);
+                            state = STATE_MULTILINE_STRING;
+                            break;
+                        } else {
+                        ungetc(c3, scanner->stream);
+                        token->type = TYPE_STRING_LITERAL;
+                        token->value.string = (char*)safeMalloc(1);
+                        token->value.string[0] = '\0';
+                        return 0;
+                        } 
+
+                    }
+                    ungetc(c2, scanner->stream);
+                    strInit(&attr);
                     strClear(&attr);
-                    strAppend(&attr, c);
                     state = STATE_STRING;
                     break;
+
+                    
                 }
 
                 if(isdigit(c)) {
+                    strInit(&attr);
                     strClear(&attr);
                     strAppend(&attr,c);
                     state = STATE_INT_LITERAL;
@@ -217,10 +235,40 @@ int getToken(Token* token, Scanner* scanner) {
                 }
 
                 if(isalpha(c) || c=='_'){
+                    strInit(&attr);
                     strClear(&attr);
                     strAppend(&attr,c);
                     state = STATE_IDENTIFIER;
                     break;
+                }
+
+                if(c =="@"){
+                    char expected[] = "main";
+                    for(int i = 0; i < 4; i++){
+                        int next = fgetc(scanner->stream);
+                        if(next != expected[i]) {
+                            token->type = TYPE_ERROR;
+                            return 1;
+                        }
+                    }
+                    token->type = TYPE_MAIN;
+                    return 0;
+                }
+
+                if( c =='(') {
+                    int next = fgetc(scanner->stream);
+                    if(next == ')') {
+                        token->type = TYPE_UNIT_LITERAL;
+                        return 0;
+                    }
+                    ungetc(next, scanner->stream);
+                    token->type = TYPE_LEFT_PAREN;
+                    return 0;
+                }
+
+                if( c =='.') {
+                    token->type = TYPE_DOT;
+                    return 0;
                 }
 
                 if (c == EOF) {
@@ -577,6 +625,43 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 token->type = TYPE_ERROR;
                 return 1;
+
+            case STATE_MULTILINE_STRING:
+                if(c == EOF){
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                if(c == '\n'){
+                    scanner->line++;
+                    strAppend(&attr, '\n');
+                    break;
+                }
+
+                if(c == '"') {
+                    int c2 = fgetc(scanner->stream);
+                    if(c2 == '"'){
+                        int c3 = fgetc(scanner->stream);
+                        if(c3 == '"') {
+                            token->type = TYPE_STRING_LITERAL;
+                            token->value.string = (char*)safeMalloc(attr.len + 1);
+                            strcpy(token->value.string, attr.data);
+                            strFree(&attr);
+                            return 0;
+                        }
+
+                        strAppend(&attr, '"');
+                        strAppend(&attr, '"');
+                        ungetc(c3, scanner->stream);
+                        break;
+                    }
+                    strAppend(&attr, '"');
+                        ungetc(c2, scanner->stream);
+                        break;
+                }
+                strAppend(&attr, c);
+                break;
 
 
 
