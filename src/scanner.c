@@ -19,7 +19,9 @@ typedef enum {
     STATE_EXP,
     STATE_EXP_SIGN,
     STATE_EXP_LITERAL,
-    STATE_EXP_UNDERSCORE
+    STATE_EXP_UNDERSCORE,
+    STATE_STRING,
+    STATE_STRING_ESC
 } State;
 
 
@@ -197,6 +199,13 @@ int getToken(Token* token, Scanner* scanner) {
                     strClear(&attr);
                     strAppend(&attr, c);
                     state = STATE_ZERO;
+                    break;
+                }
+
+                if(c == '"') {
+                    strClear(&attr);
+                    strAppend(&attr, c);
+                    state = STATE_STRING;
                     break;
                 }
 
@@ -509,6 +518,65 @@ int getToken(Token* token, Scanner* scanner) {
 
                 strFree(&attr);
                 return 0;
+
+            case STATE_STRING:
+                if(c =='"'){
+                    token->type = TYPE_STRING_LITERAL;
+                    token->value.string = (char*)safeMalloc(attr.len + 1);
+                    strcpy(token->value.string, attr.data);
+
+                    strFree(&attr);
+                    return 0;
+                }
+
+                if(c =='\\'){
+                    state = STATE_STRING_ESC;
+                    break;
+                }
+
+                if(c =='\n' || c==EOF) {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                strAppend(&attr, c);
+                break;
+
+            case STATE_STRING_ESC:
+                if(c == '"'){
+                    strAppend(&attr, c);
+                    state = STATE_STRING;
+                    break;
+                }
+                
+                if(c =='n'){
+                    strAppend(&attr, '\n');
+                    state = STATE_STRING;
+                    break;
+                }
+
+                if(c =='t'){
+                    strAppend(&attr, '\t');
+                    state = STATE_STRING;
+                    break;
+                }
+
+                if(c =='r'){
+                    strAppend(&attr, '\r');
+                    state = STATE_STRING;
+                    break;
+                }
+
+                if(c=='\\'){
+                    strAppend(&attr, c);
+                    state = STATE_STRING;
+                    break;
+                }
+
+                strFree(&attr);
+                token->type = TYPE_ERROR;
+                return 1;
 
 
 
