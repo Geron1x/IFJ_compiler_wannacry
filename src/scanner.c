@@ -470,6 +470,13 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                if( c == 'd' || c == 'D') {
+                    token->type = TYPE_DOUBLE_LITERAL;
+                    token->value.numberFloat = strod(attr.data, NULL);
+                    strFree(&attr);
+                    return 0;
+                }
+
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
                 token->value.numberFloat = strtod(attr.data, NULL);
@@ -527,6 +534,13 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                if(c == 'd' || c == 'D') {
+                    token->type = TYPE_DOUBLE_LITERAL;
+                    token->value.numberFloat = strod(attr.data, NULL);
+                    strFree(&attr);
+                    return 0;
+                }
+
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
                 token->value.numberFloat = strtod(attr.data, NULL);
@@ -550,6 +564,13 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                     }
                 ungetc(c, scanner->stream);
+
+                if(attr.len == 1 && attr.data[0] == '_') {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
                 token->type= TYPE_IDENTIFIER;
 
                 for(int i = 0; Keywords[i].keyword != NULL; i++) {
