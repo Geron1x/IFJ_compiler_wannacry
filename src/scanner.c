@@ -105,9 +105,89 @@ Keyword Keywords[] = {
     {NULL, 0}
 };
 
+static int indentStack[128] = {0};
+static int indentTop = 0;
+static int pendingDedents = 0;
+static bool atLineStart = true;
+
 int getToken(Token* token, Scanner* scanner) {
     State state = STATE_START;
     token->line = scanner->line;
+
+    if(pendingDedents > 0){
+        pendingDedents--;
+        token->type = TYPE_DEDENT;
+        return 0;
+    }
+
+    while (atLineStart) {
+        int spaces = 0;
+        int c;
+
+        while((c=fgetc(scanner->stream)) == ' ') {
+            spaces++;
+        }
+
+        if(c == '\t') {
+            token->type = TYPE_ERROR;
+            return 1;
+        }
+
+        if(c == '/') {
+            int next = fgetc(scanner->stream);
+            if(next == '/'){
+                while((c = fgetc(scanner->stream)) != '\n' && c != EOF){}
+                if(c == '\n') scanner->line++;
+                continue;
+            }
+            ungetc(next, scanner->stream);
+        }
+        
+
+        if(c == EOF) {
+            if(indentTop > 0){
+                indentTop--;
+                token->type = TYPE_DEDENT;
+                return 0;
+            }
+            token->type = TYPE_EOF;
+            return 0;
+        }
+
+        ungetc(c, scanner->stream);
+        atLineStart = false;
+
+        if (spaces > indentStack[indentTop]) {
+            indentTop++;
+            indentStack[indentTop] = spaces;
+            token->type = TYPE_INDENT;
+            return 0;
+        }
+
+        if(spaces < indentStack[indentTop]) {
+            int targetIndex = -1;
+            for (int i = indentTop - 1; i >= 0; i--) {
+                if (indentStack[i] == spaces) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+            if(targetIndex == -1) {
+                token->type = TYPE_ERROR;
+                return 1;
+            }
+
+            int dedentCount = indentTop - targetIndex;
+            indentTop = targetIndex;
+
+            pendingDedents = dedentCount - 1;
+            token->type = TYPE_DEDENT;
+            return 0;
+        }
+
+        break;
+    }
+
     int commentLevel = 0;
     DynamicString attr;
 
@@ -115,18 +195,14 @@ int getToken(Token* token, Scanner* scanner) {
         int c = fgetc(scanner->stream);
         switch (state) {
             case STATE_START:
-                if(c == ' ') {
+                if(c == ' ' || c == '\t') {
                     continue;
-                }
-
-                if(c == '\t') {
-                    token->type = TYPE_ERROR;
-                    return 1;
                 }
 
                 if(c == '\n') {
                     scanner->line++;
                     token->line = scanner->line;
+                    atLineStart = true;
                     token->type = TYPE_EOL;
                     return 0;
                 }
@@ -242,7 +318,7 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
-                if(c =="@"){
+                if(c =='@'){
                     char expected[] = "main";
                     for(int i = 0; i < 4; i++){
                         int next = fgetc(scanner->stream);
@@ -271,8 +347,16 @@ int getToken(Token* token, Scanner* scanner) {
                     return 0;
                 }
 
-                if (c == EOF) {
-                    token->type = TYPE_EOF;
+
+
+                if(c == EOF) {
+                    if(indentTop > 0){
+                        indentTop--;
+                        token->type = TYPE_DEDENT;
+                        return 0;
+                    }
+                    atLineStart = false;
+                    token->type = TYPE_EOL;
                     return 0;
                 }
 
@@ -472,7 +556,7 @@ int getToken(Token* token, Scanner* scanner) {
 
                 if( c == 'd' || c == 'D') {
                     token->type = TYPE_DOUBLE_LITERAL;
-                    token->value.numberFloat = strod(attr.data, NULL);
+                    token->value.numberFloat = strtod(attr.data, NULL);
                     strFree(&attr);
                     return 0;
                 }
@@ -536,7 +620,7 @@ int getToken(Token* token, Scanner* scanner) {
 
                 if(c == 'd' || c == 'D') {
                     token->type = TYPE_DOUBLE_LITERAL;
-                    token->value.numberFloat = strod(attr.data, NULL);
+                    token->value.numberFloat = strtod(attr.data, NULL);
                     strFree(&attr);
                     return 0;
                 }
@@ -690,7 +774,6 @@ int getToken(Token* token, Scanner* scanner) {
     }
     return 0;
 }
-
 int main() {
 
     return 0;
