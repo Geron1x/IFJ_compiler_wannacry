@@ -1,5 +1,10 @@
+// Project: Implementace překladače imperativního jazyka IFJ26C
+//Authors:
+//Artem Antonenko (xantona00)
+
 #include "scanner.h"
 
+// define states for finite automaton
 typedef enum {
     STATE_START,
     STATE_IDENTIFIER,
@@ -25,13 +30,14 @@ typedef enum {
     STATE_MULTILINE_STRING
 } State;
 
-
+// dynamic string to save lexeme
 typedef struct {
     char *data;
     int len;
     int capacity;
 } DynamicString;
 
+// allocate memory safely
 void *safeMalloc(int size) {
     void *ptr = malloc(size);
     if(ptr == NULL){
@@ -41,6 +47,7 @@ void *safeMalloc(int size) {
     return ptr;
 }
 
+// init empty string for lexeme
 bool strInit(DynamicString *s) {
     s->capacity = 16;
     s->len = 0;
@@ -49,6 +56,7 @@ bool strInit(DynamicString *s) {
     return true;
 }
 
+// free string memory
 void strFree(DynamicString *s) {
     if(s->data != NULL) {
         free(s->data);
@@ -58,6 +66,7 @@ void strFree(DynamicString *s) {
     s->capacity = 0;
 }
 
+// add char to lexeme string and resize buffer
 void strAppend(DynamicString *s, char c) {
     if (s->len +1 >= s->capacity) {
         s->capacity *= 2;
@@ -74,6 +83,7 @@ void strAppend(DynamicString *s, char c) {
     s->data[s->len] = '\0';
 }
 
+// reset lexeme string length
 void strClear(DynamicString *s) {
     s->len = 0;
     if(s->data != NULL) {
@@ -81,11 +91,13 @@ void strClear(DynamicString *s) {
     }
 }
 
+// struct for keyword and token mapping
 typedef struct {
     char *keyword;
     Type type;
 } Keyword;
 
+// list of reserved keywords
 Keyword Keywords[] = {
     {"def", TYPE_DEF},
     {"do", TYPE_DO},
@@ -104,36 +116,43 @@ Keyword Keywords[] = {
     {NULL, 0}
 };
 
-static int indentStack[128] = {0};
-static int indentTop = 0;
-static int pendingDedents = 0;
-static bool atLineStart = true;
-static int parenLevel = 0;
+static int indentStack[128] = {0}; // stack to track indent levels
+static int indentTop = 0; // top index of indent stack
+static int pendingDedents = 0; // count of pending dedent tokens
+static bool atLineStart = true; // flag to check start of physical line
+static int parenLevel = 0; // count open parens for syntax rules
 
+// read next token from input stream
 int getToken(Token* token, Scanner* scanner) {
-    State state = STATE_START;
-    token->line = scanner->line;
-    bool hasNewLine = false;
+    State state = STATE_START; // set start state of automaton
+    token->line = scanner->line; // save line number for token
+    bool hasNewLine = false; // flag to check newline
 
+    // emit pending dedent tokens first
     if(pendingDedents > 0){
         pendingDedents--;
         token->type = TYPE_DEDENT;
         return 0;
     }
 
+    // check indent logic at start of line
     while (atLineStart) {
+        // reset space counter
         int spaces = 0;
         int c;
 
+        // count spaces to find indent level
         while((c=fgetc(scanner->stream)) == ' ') {
             spaces++;
         }
 
+        // skip empty line
         if(c == '\n'){
             scanner->line++;
             continue;
         }
 
+        // handle carriage return symbol
         if(c == '\r'){
             int next = fgetc(scanner->stream);
             if(next == '\n'){
@@ -144,11 +163,13 @@ int getToken(Token* token, Scanner* scanner) {
             continue;
         }
 
+        // tab causes lexical error
         if(c == '\t') {
             token->type = TYPE_ERROR;
             return 1;
         }
 
+        // check start of comment block
         if(c == '/') {
             int next = fgetc(scanner->stream);
             if(next == '/'){
@@ -160,6 +181,7 @@ int getToken(Token* token, Scanner* scanner) {
         }
         
 
+        // handle eof token generation
         if(c == EOF) {
             if(indentTop > 0){
                 indentTop--;
@@ -173,6 +195,7 @@ int getToken(Token* token, Scanner* scanner) {
         ungetc(c, scanner->stream);
         atLineStart = false;
 
+        // check for indent token generation
         if (spaces > indentStack[indentTop]) {
             indentTop++;
             indentStack[indentTop] = spaces;
@@ -180,6 +203,7 @@ int getToken(Token* token, Scanner* scanner) {
             return 0;
         }
 
+        // check for dedent token generation
         if(spaces < indentStack[indentTop]) {
             int targetIndex = -1;
             for (int i = indentTop - 1; i >= 0; i--) {
@@ -188,39 +212,47 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
             }
+            // lexical error if indent is wrong
             if(targetIndex == -1) {
                 token->type = TYPE_ERROR;
                 return 1;
             }
 
+            // count how many dedents to emit
             int dedentCount = indentTop - targetIndex;
             indentTop = targetIndex;
 
+            // save extra dedents for next tokens
             pendingDedents = dedentCount - 1;
             token->type = TYPE_DEDENT;
             return 0;
         }
-
         break;
     }
 
-    int commentLevel = 0;
-    DynamicString attr;
+    int commentLevel = 0; // counter for nested block comments
+    DynamicString attr; // dynamic string for attribute value
 
+    // main loop of finite automaton
     while(true) {
-        int c = fgetc(scanner->stream);
+        int c = fgetc(scanner->stream); // read next character from stream
+        // check automaton state
         switch (state) {
+            // handle start state of automaton
             case STATE_START:
+            // ignore basic whitespace symbols
                 if(c == ' ' || c == '\t') {
                     continue;
                 }
-
+                // handle end of line symbol
                 if(c == '\n') {
                     scanner->line++;
+                    // ignore eol inside open parens
                     if(parenLevel > 0) {
                         continue;
                     }
                     token->line = scanner->line;
+                    // trigger indent check for next line
                     atLineStart = true;
                     token->type = TYPE_EOL;
                     return 0;
@@ -287,6 +319,7 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                // start zero literal parse
                 if(c == '0') {
                     strInit(&attr);
                     strClear(&attr);
@@ -295,16 +328,19 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                // start string literal parse
                 if(c == '"') {
                     int c2 = fgetc(scanner->stream);
                     if(c2 == '"'){
                         int c3 = fgetc(scanner->stream);
+                        // check for multiline string literal
                         if(c3 == '"'){
                             strInit(&attr);
                             strClear(&attr);
                             state = STATE_MULTILINE_STRING;
                             break;
                         } else {
+                        // return empty string literal token
                         ungetc(c3, scanner->stream);
                         token->type = TYPE_STRING_LITERAL;
                         token->value.string = (char*)safeMalloc(1);
@@ -313,6 +349,7 @@ int getToken(Token* token, Scanner* scanner) {
                         } 
 
                     }
+                    // fallback to single line string state
                     ungetc(c2, scanner->stream);
                     strInit(&attr);
                     strClear(&attr);
@@ -322,6 +359,7 @@ int getToken(Token* token, Scanner* scanner) {
                     
                 }
 
+                // start int literal parse
                 if(isdigit(c)) {
                     strInit(&attr);
                     strClear(&attr);
@@ -330,6 +368,7 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                // start identifier or keyword parse
                 if(isalpha(c) || c=='_'){
                     strInit(&attr);
                     strClear(&attr);
@@ -338,6 +377,7 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                // check for main keyword token
                 if(c =='@'){
                     char expected[] = "main";
                     for(int i = 0; i < 4; i++){
@@ -351,18 +391,22 @@ int getToken(Token* token, Scanner* scanner) {
                     return 0;
                 }
 
+                // start left paren or unit parse
                 if( c =='(') {
                     int next = fgetc(scanner->stream);
+                    // return unit literal token
                     if(next == ')') {
                         token->type = TYPE_UNIT_LITERAL;
                         return 0;
                     }
+                    // return left paren token
                     ungetc(next, scanner->stream);
                     parenLevel++;
                     token->type = TYPE_LEFT_PAREN;
                     return 0;
                 }
 
+                // check double literal or dot token
                 if( c =='.') {
                     int next = fgetc(scanner->stream);
                     if (isdigit(next)) {
@@ -380,6 +424,7 @@ int getToken(Token* token, Scanner* scanner) {
 
 
 
+                // handle eof inside start state
                 if(c == EOF) {
                     if(indentTop > 0){
                         indentTop--;
@@ -395,6 +440,7 @@ int getToken(Token* token, Scanner* scanner) {
 
 
 
+            // resolve assign or equal operator
             case STATE_ASSIGNMENT:
                 if (c == '=') {
                         token->type = TYPE_EQUAL;
@@ -404,6 +450,7 @@ int getToken(Token* token, Scanner* scanner) {
                     token->type = TYPE_ASSIGNMENT;
                     return 0;
 
+            // resolve lesser or equal operator
             case STATE_LESSER:
                 if (c == '=') {
                         token->type = TYPE_LESSER_EQUAL;
@@ -413,6 +460,7 @@ int getToken(Token* token, Scanner* scanner) {
                     token->type = TYPE_LESSER;
                     return 0;
 
+            // resolve bigger or equal operator
             case STATE_BIGGER:
                 if (c == '=') {
                         token->type = TYPE_BIGGER_EQUAL;
@@ -422,6 +470,7 @@ int getToken(Token* token, Scanner* scanner) {
                     token->type = TYPE_BIGGER;
                     return 0;
 
+            // resolve not equal operator
             case STATE_EXCLAMATION:
                 if (c == '=') {
                         token->type = TYPE_NOT_EQUAL;
@@ -431,6 +480,7 @@ int getToken(Token* token, Scanner* scanner) {
                     token->type = TYPE_ERROR;
                     return 1;
 
+            // resolve divide operator or comment
             case STATE_SLASH:
                 if(c =='/') {
                     state = STATE_LINE_COMMENT;
@@ -445,8 +495,10 @@ int getToken(Token* token, Scanner* scanner) {
                 token->type = TYPE_DIV;
                 return 0;
 
+            // read multiline block comment
             case STATE_BLOCK_COMMENT:
 
+                // check if block comment is closed
                 if (commentLevel == 0) {
                     if (hasNewLine && parenLevel == 0) {
                         atLineStart = true;
@@ -467,6 +519,7 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                // increase depth for nested comment
                 if(c == '/') {
                     int next = fgetc(scanner->stream);
                     if(next == '*') {
@@ -476,6 +529,7 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                // decrease depth if comment closes
                 if(c =='*') {
                     int next = fgetc(scanner->stream);
                     if(next == '/') {
@@ -495,6 +549,7 @@ int getToken(Token* token, Scanner* scanner) {
                 token->type = TYPE_ERROR;
                 break;
 
+            // read single line comment state
             case STATE_LINE_COMMENT:
                 if (c == '\n') {
                     scanner->line++;
@@ -515,6 +570,7 @@ int getToken(Token* token, Scanner* scanner) {
                 }
                 break;
 
+            // process zero prefix states
             case STATE_ZERO:
                 if(c=='.'){
                     strAppend(&attr, c);
@@ -528,6 +584,7 @@ int getToken(Token* token, Scanner* scanner) {
                     break;
                 }
 
+                // lexical error on leading zero
                 if(isdigit(c)) {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
@@ -540,6 +597,7 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 return 0;
 
+            // read integer literal lexeme
             case STATE_INT_LITERAL:
 
                 if(isdigit(c)) {
@@ -570,6 +628,7 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 return 0;
 
+            // read underscore inside int literal
             case STATE_INT_UNDERSCORE:
                 if(isdigit(c)) {
                     strAppend(&attr, c);
@@ -580,6 +639,7 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 token->type = TYPE_ERROR;
                 return 1;
+            // switch to double literal state
             case STATE_DOT:
                 if(isdigit(c)) {
                     strAppend(&attr, c);
@@ -590,6 +650,7 @@ int getToken(Token* token, Scanner* scanner) {
                 token->type = TYPE_ERROR;
                 return 1;
 
+            // read double literal lexeme
             case STATE_DOUBLE_LITERAL:
                 if(isdigit(c)) {
                     strAppend(&attr, c);
@@ -620,6 +681,7 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 return 0;
 
+                // read underscore inside double literal
             case STATE_DOUBLE_UNDERSCORE:
                 if(isdigit(c)) {
                     strAppend(&attr, c);
@@ -631,6 +693,7 @@ int getToken(Token* token, Scanner* scanner) {
                 token->type = TYPE_ERROR;
                 return 1;
 
+            // switch to exponent state
             case STATE_EXP:
                 if(c == '+' || c =='-'){
                     strAppend(&attr, c);
@@ -648,6 +711,7 @@ int getToken(Token* token, Scanner* scanner) {
                 token->type = TYPE_ERROR;
                 return 1;
 
+            // read exponent sign symbol
             case STATE_EXP_SIGN:
                 if(isdigit(c)) {
                     strAppend(&attr, c);
@@ -660,6 +724,7 @@ int getToken(Token* token, Scanner* scanner) {
                 return 1;
 
 
+            // read exponent literal lexeme
             case STATE_EXP_LITERAL:
                 if(isdigit(c)){
                     strAppend(&attr, c);
@@ -684,6 +749,7 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 return 0;
 
+            // read underscore inside exponent literal
             case STATE_EXP_UNDERSCORE:
                 if(isdigit(c)) {
                     strAppend(&attr, c);
@@ -695,6 +761,7 @@ int getToken(Token* token, Scanner* scanner) {
                 token->type = TYPE_ERROR;
                 return 1;
 
+            // read identifier lexeme string
             case STATE_IDENTIFIER:
                 if(isalnum(c) || c =='_'){
                     strAppend(&attr, c);
@@ -709,14 +776,14 @@ int getToken(Token* token, Scanner* scanner) {
                 }
 
                 token->type= TYPE_IDENTIFIER;
-
+                // check if identifier matches keyword
                 for(int i = 0; Keywords[i].keyword != NULL; i++) {
                     if(strcmp(attr.data, Keywords[i].keyword) ==0){
                         token->type = Keywords[i].type;
                         break;
                     }
                 }
-
+                // allocate memory for identifier lexeme
                 if(token->type == TYPE_IDENTIFIER) {
                     token->value.identifier = (char*)safeMalloc(attr.len +1);
                     strcpy(token->value.identifier, attr.data);
@@ -725,6 +792,7 @@ int getToken(Token* token, Scanner* scanner) {
                 strFree(&attr);
                 return 0;
 
+            // read text inside string literal
             case STATE_STRING:
                 if(c =='"'){
                     token->type = TYPE_STRING_LITERAL;
@@ -749,6 +817,7 @@ int getToken(Token* token, Scanner* scanner) {
                 strAppend(&attr, c);
                 break;
 
+            // read string escape sequence
             case STATE_STRING_ESC:
                 if(c == '"'){
                     strAppend(&attr, c);
@@ -784,6 +853,7 @@ int getToken(Token* token, Scanner* scanner) {
                 token->type = TYPE_ERROR;
                 return 1;
 
+            // read text inside multiline string
             case STATE_MULTILINE_STRING:
                 if(c == EOF){
                     strFree(&attr);
@@ -801,6 +871,7 @@ int getToken(Token* token, Scanner* scanner) {
                     int c2 = fgetc(scanner->stream);
                     if(c2 == '"'){
                         int c3 = fgetc(scanner->stream);
+                        // finish multiline string token
                         if(c3 == '"') {
                             token->type = TYPE_STRING_LITERAL;
                             token->value.string = (char*)safeMalloc(attr.len + 1);
@@ -825,9 +896,5 @@ int getToken(Token* token, Scanner* scanner) {
 
         }
     }
-    return 0;
-}
-int main() {
-    
     return 0;
 }
