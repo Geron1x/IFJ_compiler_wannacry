@@ -22,8 +22,7 @@ typedef enum {
     STATE_EXP_UNDERSCORE,
     STATE_STRING,
     STATE_STRING_ESC,
-    STATE_MULTILINE_STRING,
-    STATE_MULTILINE_WAIT_END
+    STATE_MULTILINE_STRING
 } State;
 
 
@@ -109,10 +108,12 @@ static int indentStack[128] = {0};
 static int indentTop = 0;
 static int pendingDedents = 0;
 static bool atLineStart = true;
+static int parenLevel = 0;
 
 int getToken(Token* token, Scanner* scanner) {
     State state = STATE_START;
     token->line = scanner->line;
+    bool hasNewLine = false;
 
     if(pendingDedents > 0){
         pendingDedents--;
@@ -126,6 +127,21 @@ int getToken(Token* token, Scanner* scanner) {
 
         while((c=fgetc(scanner->stream)) == ' ') {
             spaces++;
+        }
+
+        if(c == '\n'){
+            scanner->line++;
+            continue;
+        }
+
+        if(c == '\r'){
+            int next = fgetc(scanner->stream);
+            if(next == '\n'){
+                scanner->line++;
+            } else {
+                ungetc(next, scanner->stream);
+            }
+            continue;
         }
 
         if(c == '\t') {
@@ -201,6 +217,9 @@ int getToken(Token* token, Scanner* scanner) {
 
                 if(c == '\n') {
                     scanner->line++;
+                    if(parenLevel > 0) {
+                        continue;
+                    }
                     token->line = scanner->line;
                     atLineStart = true;
                     token->type = TYPE_EOL;
@@ -208,6 +227,7 @@ int getToken(Token* token, Scanner* scanner) {
                 }
 
                 if(c == ')') {
+                    if (parenLevel > 0){ parenLevel--;}
                     token->type = TYPE_RIGHT_PAREN;
                     return 0;
                 }
@@ -338,11 +358,22 @@ int getToken(Token* token, Scanner* scanner) {
                         return 0;
                     }
                     ungetc(next, scanner->stream);
+                    parenLevel++;
                     token->type = TYPE_LEFT_PAREN;
                     return 0;
                 }
 
                 if( c =='.') {
+                    int next = fgetc(scanner->stream);
+                    if (isdigit(next)) {
+                        strInit(&attr);
+                        strClear(&attr);
+                        strAppend(&attr, c);
+                        strAppend(&attr, next);
+                        state = STATE_DOUBLE_LITERAL;
+                        break;
+                    }
+                    ungetc(next, scanner->stream);
                     token->type = TYPE_DOT;
                     return 0;
                 }
@@ -356,7 +387,7 @@ int getToken(Token* token, Scanner* scanner) {
                         return 0;
                     }
                     atLineStart = false;
-                    token->type = TYPE_EOL;
+                    token->type = TYPE_EOF;
                     return 0;
                 }
 
@@ -415,6 +446,16 @@ int getToken(Token* token, Scanner* scanner) {
                 return 0;
 
             case STATE_BLOCK_COMMENT:
+
+                if (commentLevel == 0) {
+                    if (hasNewLine && parenLevel == 0) {
+                        atLineStart = true;
+                        token->type = TYPE_EOL;
+                        return 0;
+                    }
+                    state = STATE_START;
+                }
+            
                 if(c == EOF) {
                     token->type = TYPE_ERROR;
                     return 1;
@@ -422,6 +463,7 @@ int getToken(Token* token, Scanner* scanner) {
 
                 if (c == '\n') {
                     scanner->line++;
+                    hasNewLine = true;
                     break;
                 }
 
@@ -439,26 +481,37 @@ int getToken(Token* token, Scanner* scanner) {
                     if(next == '/') {
                         commentLevel--;
                         if(commentLevel ==0) {
+                            if (hasNewLine && parenLevel == 0) {
+                                atLineStart = true;
+                                token->type = TYPE_EOL;
+                                return 0;
+                            }
                             state = STATE_START;
                         }
                     } else {
                         ungetc(next, scanner->stream);
                     }
                 }
-
+                token->type = TYPE_ERROR;
                 break;
 
             case STATE_LINE_COMMENT:
                 if (c == '\n') {
                     scanner->line++;
+                    if(parenLevel > 0) {
+                        state = STATE_START;
+                        break;
+                    }
                     token->line = scanner->line;
+                    atLineStart = true;
                     token->type = TYPE_EOL;
                     return 0;
                 }
 
                 if(c == EOF) {
-                    token->type = TYPE_EOF;
-                    return 0;
+                    ungetc(c, scanner->stream);
+                    state = STATE_START;
+                    break;
                 }
                 break;
 
@@ -775,6 +828,6 @@ int getToken(Token* token, Scanner* scanner) {
     return 0;
 }
 int main() {
-
+    
     return 0;
 }
