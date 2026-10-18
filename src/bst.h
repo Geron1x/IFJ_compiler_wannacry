@@ -13,18 +13,23 @@
 
 #include <stdbool.h>
 
+typedef struct nodeData nodeData;
+typedef void (*dataEraser)(nodeData* data);
+
 /**
  * @brief Structure for AVL tree's node 
  */
 typedef struct bstnode
 {
     char* key;              /**< temp */
-    void* data;             /**< temp */
+    nodeData* data;         /**< temp */
     int height;             /**< temp */
     struct bstnode* left;   /**< temp */
     struct bstnode* right;  /**< temp */
 
 } bstNode;
+
+
 
 /**
  * @brief Initialization function for AVL tree
@@ -35,17 +40,18 @@ void bstInit(bstNode **root);
 /**
  * @brief Inserts a value into the tree and balances the tree if needed
  */
-bool bstInsert(bstNode **root, const char* key);
+bool bstInsert(bstNode **root, const char* key, nodeData* data);
 
 
 /**
  * @brief Searches for a certain value in given tree
  */
-bstNode* bstSearch(const bstNode *root, const char* key);
+nodeData* bstSearch(bstNode *root, const char* key);
 
 
 /**
  * @brief Deletes given tree and cleans all the memory
  */
-void bstDestroy(bstNode **root);
+void bstDestroy(bstNode **root, dataEraser eraseDataFunc);
+
 #endif
