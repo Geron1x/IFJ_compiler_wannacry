@@ -1,11 +1,11 @@
 /**
  * @file symtable.h
  * @brief header file for the symtable implementation
- * 
- * Project: Implementace překladače imperativního jazyka IFJ2026
- * 
+ *
+ * Project: Implementace překladače imperativního jazyka IFJ26
+ *
  * @author Arkhyp Samoilenko (xsamoia00)
- * 
+ *
  */
 
 #ifndef SYMTABLE_H
@@ -19,7 +19,7 @@ typedef enum
     TYPE_INT,
     TYPE_DOUBLE,
     TYPE_STRING,
-    TYPR_BOOL
+    TYPE_BOOL
 } dataType;
 
 typedef enum
@@ -48,8 +48,8 @@ typedef struct functiondata
 typedef struct nodeData
 {
     idType type;
-    
-    union 
+
+    union
     {
         functionData funcData;
         variableData varData;
@@ -57,6 +57,6 @@ typedef struct nodeData
 } nodeData;
 
 
-void EraseData(nodeData* data);
+void eraseData(nodeData* data);
 
 #endif
