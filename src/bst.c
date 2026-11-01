@@ -1,65 +1,85 @@
 /**
  * @file bst.c
  * @brief File for the AVL tree implementation
- * 
- * Project: Implementace překladače imperativního jazyka IFJ2026
- * 
+ *
+ * Project: Implementace překladače imperativního jazyka IFJ26
+ *
  * @author Arkhyp Samoilenko (xsamoia00)
- * 
+ *
  */
 
 #include "bst.h"
-#include <string.h>
+
 #include <stdlib.h>
+#include <string.h>
+
+/**
+ * @brief Structure for AVL tree's node
+ */
+struct bstNode
+{
+    char* key;             /**< key for comparing and placing */
+    nodeData* data;        /**< abstact data type implemented in symtable.c */
+    int height;            /**< height of a node */
+    struct bstNode* left;  /**< ptr to left child */
+    struct bstNode* right; /**< ptr to right child */
+};
 
 static bstNode* allocateNode(const char* key, nodeData* data);
-static int getHeight(const bstNode *node);
+static int getHeight(const bstNode* node);
 static int getMax(int a, int b);
-static bool placeNode(const char* newKey, bstNode** parent, nodeData* data);
+static bstStatus placeNode(const char* newKey, bstNode** parent,
+                           nodeData* data);
 static void rotateLeft(bstNode** parent);
 static void rotateRight(bstNode** parent);
 
 
-void bstInit(bstNode **root)
+void bstInit(bstNode** root)
 {
     if (root != NULL)
     {
         *root = NULL;
     }
 }
-bool bstInsert(bstNode **root, const char* key, nodeData* data)
+bstStatus bstInsert(bstNode** root, const char* key, nodeData* data)
 {
     if (root == NULL || key == NULL)
     {
-        return false;
+        return BST_ERROR;
     }
     return placeNode(key, root, data);
 }
 
-static bool placeNode(const char* newKey, bstNode** parent, nodeData* data)
+static bstStatus placeNode(const char* newKey, bstNode** parent, nodeData* data)
 {
-    /** check for a first insertion 
-     * and last insertion to either left of right child of a previously childless parent
+    /** check for a first insertion
+     * and last insertion to either left of right child of a previously
+     * childless parent
      */
-    if(*parent == NULL)
+    if (*parent == NULL)
     {
         *parent = allocateNode(newKey, data);
-        return true;
+        if (*parent == NULL)
+        {
+            return BST_ERROR;
+        }
+        return BST_INSERTED;
     }
     /** comparing both keys using strcmp */
     int cmpResult = strcmp(newKey, (*parent)->key);
     /** variable to save the return value of the recursive function.
-     *  if no node was added, ignore everything after and deliver false to the caller (bstInsert) 
-    */
-    bool wasPlaced = false;
+     *  if no node was added, ignore everything and delive error code to the
+     *  caller (bstInsert)
+     */
+    bstStatus wasPlaced = BST_INSERTED;
     /** case 1: newKey is less (in terms of ASCII table) than parent's key */
-    if(cmpResult < 0)
+    if (cmpResult < 0)
     {
         wasPlaced = placeNode(newKey, &((*parent)->left), data);
     }
 
     /** case 2: newKey is larger (in terms of ASCII table) than parent's key */
-    else if(cmpResult >0)
+    else if (cmpResult > 0)
     {
         wasPlaced = placeNode(newKey, &((*parent)->right), data);
     }
@@ -67,53 +87,53 @@ static bool placeNode(const char* newKey, bstNode** parent, nodeData* data)
     /** case 3: both keys are equal */
     else
     {
-        return false;
+        return BST_EXISTS;
     }
-    if(!wasPlaced)
+    if (wasPlaced != BST_INSERTED)
     {
-        return false;
+        return wasPlaced;
     }
     /** height of a node recalibration in case of a changed height */
     int heightL = getHeight((*parent)->left);
     int heightR = getHeight((*parent)->right);
-    (*parent)->height = 1+getMax(heightL, heightR);
+    (*parent)->height = 1 + getMax(heightL, heightR);
     /** get the balance of the current node */
     int balance = heightL - heightR;
 
     /** case 1: unbalanced toward left side */
-    if(balance > 1)
+    if (balance > 1)
     {
         /** left-right turn in case of a zig-zag node structure */
-        if(strcmp((*parent)->left->key, newKey) < 0)
+        if (strcmp((*parent)->left->key, newKey) < 0)
         {
             rotateLeft(&(*parent)->left);
             rotateRight(parent);
-            return true;
+            return BST_INSERTED;
         }
         /** basic right turn */
         rotateRight(parent);
-        return true;
+        return BST_INSERTED;
     }
     /** case 2: unbalanced toward right side */
-    else if(balance < -1)
+    else if (balance < -1)
     {
         /** right-left turn in case of a zig-zag node structure */
-        if(strcmp((*parent)->right->key, newKey) > 0)
+        if (strcmp((*parent)->right->key, newKey) > 0)
         {
             rotateRight(&(*parent)->right);
             rotateLeft(parent);
-            return true;
+            return BST_INSERTED;
         }
         /** basic left turn */
         rotateLeft(parent);
-        return true;
+        return BST_INSERTED;
     }
-    return true;
-} 
+    return BST_INSERTED;
+}
 
 static int getHeight(const bstNode* node)
 {
-    if(node == NULL)
+    if (node == NULL)
     {
         return 0;
     }
@@ -132,15 +152,13 @@ static bstNode* allocateNode(const char* key, nodeData* data)
     bstNode* newNode = malloc(sizeof(bstNode));
     if (newNode == NULL)
     {
-        /* (TODO) free up memory */
-        exit(1); /* (TODO) change the code in accordance to specification */
+        return NULL;
     }
     newNode->key = malloc(strlen(key) + 1);
     if (newNode->key == NULL)
     {
-        /* (TODO) free up memory */
         free(newNode);
-        exit(1); /* (TODO) change the code in accordance to specification */
+        return NULL;
     }
     strcpy(newNode->key, key);
 
@@ -163,8 +181,10 @@ static void rotateLeft(bstNode** parent)
     *parent = temp;
 
     /** change height of new parent and its left child (former parent) */
-    (*parent)->left->height = 1+getMax(getHeight((*parent)->left->left), getHeight((*parent)->left->right));
-    (*parent)->height = 1+getMax(getHeight((*parent)->left), getHeight((*parent)->right));
+    (*parent)->left->height = 1 + getMax(getHeight((*parent)->left->left),
+                                         getHeight((*parent)->left->right));
+    (*parent)->height =
+        1 + getMax(getHeight((*parent)->left), getHeight((*parent)->right));
 }
 static void rotateRight(bstNode** parent)
 {
@@ -178,38 +198,45 @@ static void rotateRight(bstNode** parent)
     *parent = temp;
 
     /** change height of new parent and its right child (former parent) */
-    (*parent)->right->height = 1+getMax(getHeight((*parent)->right->left), getHeight((*parent)->right->right));
-    (*parent)->height = 1+getMax(getHeight((*parent)->left), getHeight((*parent)->right));
+    (*parent)->right->height = 1 + getMax(getHeight((*parent)->right->left),
+                                          getHeight((*parent)->right->right));
+    (*parent)->height =
+        1 + getMax(getHeight((*parent)->left), getHeight((*parent)->right));
 }
 
 nodeData* bstSearch(bstNode* root, const char* key)
 {
+    /** check whether current root is the end of a branch */
     if (root == NULL)
     {
         return NULL;
     }
+    /** comparing keys of searched node and deciding where it should go */
     int cmpResult = strcmp(key, root->key);
-    if (cmpResult< 0)
+    /** case 1: it will go to the left branch */
+    if (cmpResult < 0)
     {
         return bstSearch(root->left, key);
     }
+    /** case 2: it will go to the right branch */
     else if (cmpResult > 0)
     {
         return bstSearch(root->right, key);
     }
+    /** matching keys means return data from searched node */
     else
     {
         return root->data;
     }
 }
 
-void bstDestroy(bstNode **root, dataEraser eraseDataFunc)
+void bstDestroy(bstNode** root, dataEraser eraseDataFunc)
 {
-    /** first check whether given address of ptr root is valid 
-     * then if given address is ok it can proceed to check whether it's in existing node
-     * and start backtracing to last real node
+    /** first check whether given address of ptr root is valid
+     * then if given address is ok it can proceed to check whether it's in
+     * existing node and start backtracing to last real node
      */
-    if(root == NULL || *root == NULL)
+    if (root == NULL || *root == NULL)
     {
         return;
     }
