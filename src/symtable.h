@@ -1,11 +1,11 @@
 /**
  * @file symtable.h
  * @brief header file for the symtable implementation
- * 
+ *
  * Project: Implementace překladače imperativního jazyka IFJ2026
- * 
+ *
  * @author Arkhyp Samoilenko (xsamoia00)
- * 
+ *
  */
 
 #ifndef SYMTABLE_H
@@ -48,8 +48,8 @@ typedef struct functiondata
 typedef struct nodeData
 {
     idType type;
-    
-    union 
+
+    union
     {
         functionData funcData;
         variableData varData;
