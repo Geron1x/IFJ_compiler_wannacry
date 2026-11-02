@@ -10,8 +10,74 @@ typedef enum
     STATE_LESSER,
     STATE_BIGGER,
     STATE_ASSIGNMENT,
-    STATE_EXCLAMATION
+    STATE_EXCLAMATION,
 } State;
+
+
+typedef struct
+{
+    char* data;
+    int len;
+    int capacity;
+} DynamicString;
+
+void* safeMalloc(int size)
+{
+    void* ptr = malloc(size);
+    if (ptr == NULL)
+    {
+        fprintf(stderr, "Out of memory!\n");
+        exit(99);
+    }
+    return ptr;
+}
+
+bool strInit(DynamicString* s)
+{
+    s->capacity = 16;
+    s->len = 0;
+    s->data = (char*)safeMalloc(s->capacity * sizeof(char));
+    s->data[0] = '\0';
+    return true;
+}
+
+void strFree(DynamicString* s)
+{
+    if (s->data != NULL)
+    {
+        free(s->data);
+        s->data = NULL;
+    }
+    s->len = 0;
+    s->capacity = 0;
+}
+
+void strAppend(DynamicString* s, char c)
+{
+    if (s->len + 1 >= s->capacity)
+    {
+        s->capacity *= 2;
+
+        char* newData = (char*)realloc(s->data, s->capacity * sizeof(char));
+        if (newData == NULL)
+        {
+            fprintf(stderr, "Out of memory in realloc!\n");
+            exit(99);
+        }
+        s->data = newData;
+    }
+    s->data[s->len++] = c;
+    s->data[s->len] = '\0';
+}
+
+void strClear(DynamicString* s)
+{
+    s->len = 0;
+    if (s->data != NULL)
+    {
+        s->data[0] = '\0';
+    }
+}
 
 int getToken(Token* token, Scanner* scanner)
 {
