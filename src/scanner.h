@@ -110,6 +110,7 @@ typedef struct
     int indentTop;
     int pendingDedents;
     int atLineStart;
+    int parenLevel;
 } Scanner;
 
 /**
