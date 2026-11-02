@@ -398,13 +398,6 @@ int getToken(Token* token, Scanner* scanner)
 
                 if (c == '(')
                 {
-                    int next = fgetc(scanner->stream);
-                    if (next == ')')
-                    {
-                        token->type = TYPE_UNIT_LITERAL;
-                        return 0;
-                    }
-                    ungetc(next, scanner->stream);
                     token->type = TYPE_LEFT_PAREN;
                     return 0;
                 }
