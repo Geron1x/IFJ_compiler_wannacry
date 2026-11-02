@@ -105,10 +105,118 @@ Keyword Keywords[] = {
     {"then", TYPE_THEN}, {"Unit", TYPE_UNIT},     {"val", TYPE_VAL},
     {"var", TYPE_VAR},   {"while", TYPE_WHILE},   {NULL, 0}};
 
+void scannerInit(Scanner* scanner, FILE* stream)
+{
+    scanner->line = 1;
+    scanner->firstRead = 1;
+    scanner->stream = stream;
+
+    scanner->indentStack[0] = 0;
+    scanner->indentTop = 0;
+    scanner->pendingDedents = 0;
+    scanner->atLineStart = true;
+}
+
 int getToken(Token* token, Scanner* scanner)
 {
     State state = STATE_START;
     token->line = scanner->line;
+
+    if (scanner->pendingDedents > 0)
+    {
+        scanner->pendingDedents--;
+        token->type = TYPE_DEDENT;
+        return 0;
+    }
+
+    while (scanner->atLineStart)
+    {
+        int spaces = 0;
+        int c;
+
+        while ((c = fgetc(scanner->stream)) == ' ')
+        {
+            spaces++;
+        }
+
+        if (c == '\t')
+        {
+            token->type = TYPE_ERROR;
+            return 1;
+        }
+
+        if (c == '/')
+        {
+            int next = fgetc(scanner->stream);
+            if (next == '/')
+            {
+                while ((c = fgetc(scanner->stream)) != '\n' && c != EOF)
+                {
+                }
+                if (c == '\n') scanner->line++;
+                continue;
+            }
+            ungetc(next, scanner->stream);
+        }
+
+
+        if (c == EOF)
+        {
+            if (scanner->indentTop > 0)
+            {
+                scanner->indentTop--;
+                token->type = TYPE_DEDENT;
+                return 0;
+            }
+            token->type = TYPE_EOF;
+            return 0;
+        }
+
+        if (c == '\n')
+        {
+            scanner->line++;
+            continue;
+        }
+
+        ungetc(c, scanner->stream);
+        scanner->atLineStart = false;
+
+        if (spaces > scanner->indentStack[scanner->indentTop])
+        {
+            scanner->indentTop++;
+            scanner->indentStack[scanner->indentTop] = spaces;
+            token->type = TYPE_INDENT;
+            return 0;
+        }
+
+        if (spaces < scanner->indentStack[scanner->indentTop])
+        {
+            int targetIndex = -1;
+            for (int i = scanner->indentTop - 1; i >= 0; i--)
+            {
+                if (scanner->indentStack[i] == spaces)
+                {
+                    targetIndex = i;
+                    break;
+                }
+            }
+            if (targetIndex == -1)
+            {
+                token->type = TYPE_ERROR;
+                return 1;
+            }
+
+            int dedentCount = scanner->indentTop - targetIndex;
+            scanner->indentTop = targetIndex;
+
+            scanner->pendingDedents = dedentCount - 1;
+            token->type = TYPE_DEDENT;
+            return 0;
+        }
+
+        break;
+    }
+
     int commentLevel = 0;
     DynamicString attr;
 
@@ -118,21 +226,17 @@ int getToken(Token* token, Scanner* scanner)
         switch (state)
         {
             case STATE_START:
-                if (c == ' ')
+                if (c == ' ' || c == '\t')
                 {
                     continue;
                 }
 
-                if (c == '\t')
-                {
-                    token->type = TYPE_ERROR;
-                    return 1;
-                }
 
                 if (c == '\n')
                 {
                     scanner->line++;
                     token->line = scanner->line;
+                    scanner->atLineStart = true;
                     token->type = TYPE_EOL;
                     return 0;
                 }
@@ -311,12 +415,21 @@ int getToken(Token* token, Scanner* scanner)
                     return 0;
                 }
 
+
                 if (c == EOF)
                 {
+                    if (scanner->indentTop > 0)
+                    {
+                        scanner->indentTop--;
+                        token->type = TYPE_DEDENT;
+                        return 0;
+                    }
+                    scanner->atLineStart = false;
                     token->type = TYPE_EOF;
                     return 0;
                 }
-
+                token->type = TYPE_ERROR;
+                return 1;
                 break;
 
 
