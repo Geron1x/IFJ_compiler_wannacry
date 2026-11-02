@@ -111,7 +111,6 @@ int getToken(Token* token, Scanner* scanner)
     token->line = scanner->line;
     int commentLevel = 0;
     DynamicString attr;
-    strInit(&attr);
 
     while (true)
     {
@@ -135,12 +134,6 @@ int getToken(Token* token, Scanner* scanner)
                     scanner->line++;
                     token->line = scanner->line;
                     token->type = TYPE_EOL;
-                    return 0;
-                }
-
-                if (c == '(')
-                {
-                    token->type = TYPE_LEFT_PAREN;
                     return 0;
                 }
 
@@ -250,7 +243,6 @@ int getToken(Token* token, Scanner* scanner)
                     ungetc(c2, scanner->stream);
                     strInit(&attr);
                     strClear(&attr);
-                    strAppend(&attr, c);
                     state = STATE_STRING;
                     break;
                 }
@@ -550,6 +542,14 @@ int getToken(Token* token, Scanner* scanner)
                     break;
                 }
 
+                if (c == 'd' || c == 'D')
+                {
+                    token->type = TYPE_DOUBLE_LITERAL;
+                    token->value.numberFloat = strtod(attr.data, NULL);
+                    strFree(&attr);
+                    return 0;
+                }
+
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
                 token->value.numberFloat = strtod(attr.data, NULL);
@@ -613,6 +613,14 @@ int getToken(Token* token, Scanner* scanner)
                     break;
                 }
 
+                if (c == 'd' || c == 'D')
+                {
+                    token->type = TYPE_DOUBLE_LITERAL;
+                    token->value.numberFloat = strtod(attr.data, NULL);
+                    strFree(&attr);
+                    return 0;
+                }
+
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
                 token->value.numberFloat = strtod(attr.data, NULL);
@@ -638,6 +646,14 @@ int getToken(Token* token, Scanner* scanner)
                     break;
                 }
                 ungetc(c, scanner->stream);
+
+                if (attr.len == 1 && attr.data[0] == '_')
+                {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
                 token->type = TYPE_IDENTIFIER;
 
                 for (int i = 0; Keywords[i].keyword != NULL; i++)
