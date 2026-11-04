@@ -1,13 +1,10 @@
 // Project: Implementace překladače imperativního jazyka IFJ26C
 // Author:
 // Heorhiy Haziy (xhaziyh00)
-#include <math.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "scanner.h"
-#include "symtable.h"
+#include "../scanner.h"
 
 // Macro for automatic error propagation
 #define CHECK_ERR(call)             \
@@ -93,21 +90,10 @@ int matchDataType(parcerContext* ctx)
 }
 int parseValue(parcerContext* ctx)
 {
-    Val valName;
-    Type valType = TYPE_UNIT_LITERAL;
-    Val valValue;
-
-    // Next token to get name
+    // next tocken and name check
     CHECK_ERR(advance(ctx));
-    valName = ctx->currentToken.value;
+    CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
 
-    // Check if name already exists
-    if (getDefName(valName) != 0)
-    {
-        // Semantic error: redeclaration (code 3)
-        fprintf(stderr, "Semantic error: Value name already declarated\n");
-        return 3;
-    }
 
     // If name doesnt exist parse type
     CHECK_ERR(advance(ctx));
@@ -115,8 +101,6 @@ int parseValue(parcerContext* ctx)
     {
         // Skip ":"
         CHECK_ERR(advance(ctx));
-        // Save type declaration (e.g. TYPE_INT)
-        valType = ctx->currentToken.type;
         // Check valid type and advance
         CHECK_ERR(matchDataType(ctx));
     }
@@ -124,14 +108,6 @@ int parseValue(parcerContext* ctx)
     // Parse "="
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
 
-    // READ VALUE BEFORE ADVANCE
-    valValue = ctx->currentToken.value;
-
-    // Auto-type derivation if not explicitly declared
-    if (valType == TYPE_UNIT_LITERAL)
-    {
-        valType = ctx->currentToken.type;
-    }
 
     // Advance past the value token
     CHECK_ERR(advance(ctx));
@@ -139,51 +115,29 @@ int parseValue(parcerContext* ctx)
     // Check end of statement (newline)
     CHECK_ERR(match(ctx, TYPE_EOL));
 
-    // Save to symbol table
-    CHECK_ERR(saveValueSymTable(valName, valType, valValue));
+    // Save to AST
+    // CHECK_ERR(createNodeAST(valName, valType, valValue));
 
     return 0;
 }
 
 int parseVariable(parcerContext* ctx)
 {
-    // next token to save name
+    // next token to check name
     CHECK_ERR(advance(ctx));
-    Val varName = ctx->currentToken.value;
-    // Declaration logic
-    if (getVarName(varName) == 0)  // Already exists
-    {
-        fprintf(stderr, "Semantic error: variable redeclaration\n");
-        return 3;
-    }
-    Type varType = TYPE_UNIT_LITERAL;
-    Val varValue;
+    CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
+
 
     CHECK_ERR(advance(ctx));
     if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
-        // if type declaration exists parse it and save for future check
+        // if type declaration exists parse it
         CHECK_ERR(advance(ctx));
-        varType = ctx->currentToken.type;
         CHECK_ERR(matchDataType(ctx));
     }
     // parse "="
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
 
-    // TEMPORARY: Read the literal value before PSA is implemented Here
-    // ctx->currentToken is a literal (e.g. TYPE_INT_LITERAL)
-    varValue = ctx->currentToken.value;
-
-    if (varType == TYPE_UNIT_LITERAL)
-    {
-        // Auto-type derivation (needs mapping later)
-        varType = ctx->currentToken.type;
-    }
-    else
-    {
-        // Type check will be done in semantics later e.g. if (varType ==
-        // TYPE_INT && ctx->currentToken.type != TYPE_INT_LITERAL) error...
-    }
 
     // Advance past the value token
     CHECK_ERR(advance(ctx));
@@ -192,8 +146,8 @@ int parseVariable(parcerContext* ctx)
 
     CHECK_ERR(match(ctx, TYPE_EOL));
 
-
-    CHECK_ERR(saveValueSymTable(varName, varType, varValue));
+    // save to AST
+    //     CHECK_ERR(createNodeAST(varName, varType, varValue));
 
 
     return 0;
