@@ -10,8 +10,10 @@
 
 #ifndef SYMTABLE_H
 #define SYMTABLE_H
-
 #include <stdbool.h>
+
+#include "bst.h"
+#include "error.h"
 
 typedef enum
 {
@@ -19,7 +21,9 @@ typedef enum
     TYPE_INT,
     TYPE_DOUBLE,
     TYPE_STRING,
-    TYPE_BOOL
+    TYPE_BOOL,
+    TYPE_ANY,
+    TYPE_UNKNOWN
 } dataType;
 
 typedef enum
@@ -28,35 +32,63 @@ typedef enum
     TYPE_VARIABLE
 } idType;
 
-typedef struct variabledata
-{
-    dataType type;
-    bool isConst;
-    bool isInit;
-    int instanceNum;
-} variableData;
+typedef struct symtable symtable;
+typedef struct nodeData nodeData;
 
-typedef struct functiondata
-{
-    int paramCount;
-    dataType* paramType;
-    dataType returnType;
-    bool isDefined;
+/**
+ * @brief Opens new scope for local variables
+ */
+Errors stackPush(symtable* symtable);
 
-} functionData;
+/**
+ * @brief Pops top scope and deletes all the variables inside
+ */
+void stackPop(symtable* symtable);
 
-typedef struct nodeData
-{
-    idType type;
+/**
+ * @brief Inserts a variable into current scope (local tree), can give
+ * redifinition feedback error code
+ */
+Errors stackInsertVar(symtable* symtable, const char* key, dataType type,
+                      bool isConst, bool isInit);
 
-    union
-    {
-        functionData funcData;
-        variableData varData;
-    };
-} nodeData;
+/**
+ * @brief Searches for a variable in the all present scopes
+ */
+nodeData* stackFindVar(const char* key, symtable* symtable);
 
+/**
+ * @brief Destructor to clear all scopes present in symtable
+ */
+void stackDestroy(symtable* symtable);
 
+/**
+ * @brief Destructor function to clear nodeData for bst.c
+ */
 void eraseData(nodeData* data);
+
+/**
+ * @brief Initialize all basic functions into symtable
+ */
+Errors symtableBaseFuncInit(symtable* funcTable);
+
+/**
+ * @brief Inserts function into symtable,
+ * can give redifinition feedback error code
+ */
+Errors symtableInsertFunc(symtable* symtable, const char* key,
+                          dataType returnType, int paramCount,
+                          const dataType* paramType);
+
+/**
+ * @brief Initialize symtable
+ */
+Errors symtableInit(symtable** symtable);
+
+/**
+ * @brief Destructor for symtable
+ */
+void symtableDestroy(symtable* table);
+
 
 #endif
