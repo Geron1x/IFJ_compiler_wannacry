@@ -2,7 +2,7 @@
  * @file bst.h
  * @brief header file for the AVL tree implementation
  *
- * Project: Implementace překladače imperativního jazyka IFJ2026
+ * Project: Implementace překladače imperativního jazyka IFJ26
  *
  * @author Arkhyp Samoilenko (xsamoia00)
  *
