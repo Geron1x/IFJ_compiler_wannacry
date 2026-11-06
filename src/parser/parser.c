@@ -163,6 +163,12 @@ int parseFunction(parcerContext* ctx)
         while (ctx->currentToken.type == TYPE_COMMA)
         {
             CHECK_ERR(advance(ctx));  // skip comma
+
+            // Trailing comma before ')' is allowed
+            if (ctx->currentToken.type == TYPE_RIGHT_PAREN)
+            {
+                break;
+            }
             CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
             CHECK_ERR(match(ctx, TYPE_DOUBLE_DOT));
             CHECK_ERR(matchDataType(ctx));
