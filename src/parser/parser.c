@@ -52,8 +52,9 @@ int parseCallArgs(parcerContext* ctx);
 // point of entry in kompiler
 int parse(void)
 {
-    // Fully initialize scanner and context
-    Scanner scanner = {.line = 1, .firstRead = 0, .stream = stdin};
+    // Initialize scanner state through its own init function
+    Scanner scanner;
+    scannerInit(&scanner, stdin);
     parcerContext ctx = {.currentToken = {.type = TYPE_ERROR, .line = 1},
                          .globalScanner = &scanner};
 
@@ -66,7 +67,7 @@ int parse(void)
     if (err == 0)
     {
         // just to test if program runned correctly
-        printf("Syntax analysis finished succesfully (code 0).\n");
+        fprintf(stderr, "Syntax analysis finished succesfully (code 0).\n");
     }
     return err;
 }
@@ -76,7 +77,7 @@ int parse(void)
 
 int parseProgram(parcerContext* ctx)
 {
-    CHECK_ERR(advance(ctx));  // first tokrn of the program
+    CHECK_ERR(advance(ctx));  // first token of the program
 
     // if empty lines exists => skip them
     while (ctx->currentToken.type == TYPE_EOL)
@@ -101,6 +102,7 @@ int parseProgram(parcerContext* ctx)
             // the main must be def as @main
             // if the line starts by @main parse function
             CHECK_ERR(advance(ctx));
+            if (ctx->currentToken.type == TYPE_EOL) CHECK_ERR(advance(ctx));
             CHECK_ERR(parseFunction(ctx));
         }
         else if (ctx->currentToken.type == TYPE_DEF)
