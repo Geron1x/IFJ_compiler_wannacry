@@ -1,10 +1,13 @@
 // Project: Implementace překladače imperativního jazyka IFJ26C
 // Author:
 // Heorhiy Haziy (xhaziyh00)
+#include "parser.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "../bst.h"
 #include "../scanner.h"
 
 // GLOBAL VAR
@@ -24,49 +27,94 @@ typedef struct
                                     \
     } while (0)
 
-// Free heap string owned by the token
-void freeTokenValue(Token* token)
+// Prototypes of internal functions
+
+// Token helpers
+void freeTokenValue(Token* token);
+int advance(parcerContext* ctx);
+int match(parcerContext* ctx, Type expectedType);
+int matchDataType(parcerContext* ctx);
+
+// Program structure
+int parseProgram(parcerContext* ctx);
+int parsePrologue(parcerContext* ctx);
+int parseFunction(parcerContext* ctx);
+
+// Statements
+int parseValue(parcerContext* ctx);
+int parseVariable(parcerContext* ctx);
+int parseStatementEnd(parcerContext* ctx);
+
+// Values and calls (call each other recursively)
+int parseExprOrCall(parcerContext* ctx);
+int parseCallArgs(parcerContext* ctx);
+
+// point of entry in kompiler
+int parse(void)
 {
-    // Only these token types carry malloc'ed strings
-    if (token->type == TYPE_IDENTIFIER || token->type == TYPE_STRING_LITERAL)
+    // Fully initialize scanner and context
+    Scanner scanner = {.line = 1, .firstRead = 0, .stream = stdin};
+    parcerContext ctx = {.currentToken = {.type = TYPE_ERROR, .line = 1},
+                         .globalScanner = &scanner};
+
+    // start parsing
+    int err = parseProgram(&ctx);
+
+    // Single cleanup point for success and error
+    freeTokenValue(&ctx.currentToken);
+
+    if (err == 0)
     {
-        // identifier and string share one slot in the union
-        free(token->value.identifier);
-        token->value.identifier = NULL;
+        // just to test if program runned correctly
+        printf("Syntax analysis finished succesfully (code 0).\n");
     }
+    return err;
 }
+// ============================================================
+// 2. main function to parce
+// ============================================================
 
-// read next token
-int advance(parcerContext* ctx)
+int parseProgram(parcerContext* ctx)
 {
-    // Release previous token before overwriting it
-    freeTokenValue(&ctx->currentToken);
-    // Mark token as empty so a failed read cannot cause double free
-    ctx->currentToken.type = TYPE_ERROR;
+    CHECK_ERR(advance(ctx));  // first tokrn of the program
 
-    int err = getToken(&(ctx->currentToken), ctx->globalScanner);
-    if (err != 0)
+    // if empty lines exists => skip them
+    while (ctx->currentToken.type == TYPE_EOL)
     {
-        // error in lexer
-        fprintf(stderr, "Lexical err (line %d)\n", ctx->currentToken.line);
-        return 1;
+        CHECK_ERR(advance(ctx));
+    }
+
+    CHECK_ERR(parsePrologue(ctx));
+
+    while (ctx->currentToken.type != TYPE_EOF)
+    {
+        // skip empty lines
+        if (ctx->currentToken.type == TYPE_EOL)
+        {
+            CHECK_ERR(advance(ctx));
+            continue;
+        }
+
+        // check for existion of annotation of @main
+        if (ctx->currentToken.type == TYPE_MAIN)
+        {
+            // the main must be def as @main
+            // if the line starts by @main parse function
+            CHECK_ERR(advance(ctx));
+            CHECK_ERR(parseFunction(ctx));
+        }
+        else if (ctx->currentToken.type == TYPE_DEF)
+        {
+            // if the line starts by def parse function
+            CHECK_ERR(parseFunction(ctx));
+        }
+        else
+        {
+            fprintf(stderr, "Syntax err: function def expected (def)\n");
+            return 2;
+        }
     }
     return 0;
-}
-
-// function to check the type of token
-int match(parcerContext* ctx, Type expectedType)
-{
-    if (ctx->currentToken.type == expectedType)
-    {
-        return advance(ctx);
-    }
-    else
-    {
-        fprintf(stderr, "Syntax err in line  %d: unpredicted token\n",
-                ctx->currentToken.line);
-        return 2;
-    }
 }
 
 // 1. parse prologue
@@ -89,83 +137,6 @@ int parsePrologue(parcerContext* ctx)
     CHECK_ERR(match(ctx, TYPE_DOT));
     CHECK_ERR(match(ctx, TYPE_MUL));
     CHECK_ERR(match(ctx, TYPE_EOL));
-    return 0;
-}
-
-int matchDataType(parcerContext* ctx)
-{
-    if (ctx->currentToken.type == TYPE_INT ||
-        ctx->currentToken.type == TYPE_DOUBLE ||
-        ctx->currentToken.type == TYPE_STRING ||
-        ctx->currentToken.type == TYPE_UNIT)
-    {
-        return advance(ctx);
-    }
-    else
-    {
-        fprintf(stderr, "Syntax error in line %d: expected data type\n",
-                ctx->currentToken.line);
-        return 2;
-    }
-}
-int parseValue(parcerContext* ctx)
-{
-    // next tocken and name check
-    CHECK_ERR(advance(ctx));
-    CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
-
-    if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
-    {
-        // Skip ":"
-        CHECK_ERR(advance(ctx));
-        // Check valid type and advance
-        CHECK_ERR(matchDataType(ctx));
-    }
-
-    // Parse "="
-    CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
-
-
-    // Advance past the value token
-    CHECK_ERR(advance(ctx));
-
-    // Check end of statement (newline)
-    CHECK_ERR(match(ctx, TYPE_EOL));
-
-    // Save to AST
-    // CHECK_ERR(createNodeAST(valName, valType, valValue));
-
-    return 0;
-}
-
-int parseVariable(parcerContext* ctx)
-{
-    // next token to check name
-    CHECK_ERR(advance(ctx));
-    CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
-
-
-    if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
-    {
-        // if type declaration exists parse it
-        CHECK_ERR(advance(ctx));
-        CHECK_ERR(matchDataType(ctx));
-    }
-    // parse "="
-    CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
-
-
-    // Advance past the value token
-    CHECK_ERR(advance(ctx));
-
-    // Check end of statement (newline)
-
-    CHECK_ERR(match(ctx, TYPE_EOL));
-
-    // save to AST
-    //     CHECK_ERR(createNodeAST(varName, varType, varValue));
-
-
     return 0;
 }
 
@@ -220,80 +191,240 @@ int parseFunction(parcerContext* ctx)
                 // parce var some code
                 CHECK_ERR(parseValue(ctx));
                 break;
+            case TYPE_IDENTIFIER:
+                // Skip identifier name
+                CHECK_ERR(advance(ctx));
+                if (ctx->currentToken.type == TYPE_ASSIGNMENT)
+                {
+                    // Assignment: id = value
+                    CHECK_ERR(advance(ctx));
+                    CHECK_ERR(parseExprOrCall(ctx));
+                }
+                else if (ctx->currentToken.type == TYPE_LEFT_PAREN)
+                {
+                    // Function call: id(args)
+                    CHECK_ERR(parseCallArgs(ctx));
+                }
+                // Otherwise bare identifier, e.g. return value at end of body
+                break;
             default:
                 fprintf(stderr,
                         "Syntax err: unexpected statement in function body\n");
                 return 2;
         }
+
+        // Common end of every statement: EOL, ';' or block end
+        CHECK_ERR(parseStatementEnd(ctx));
     }
     CHECK_ERR(match(ctx, TYPE_DEDENT));
     return 0;
 }
 
-
-// 2. main function to parce
-
-int parseProgram(parcerContext* ctx)
+int parseValue(parcerContext* ctx)
 {
-    CHECK_ERR(advance(ctx));  // first tokrn of the program
+    // next tocken and name check
+    CHECK_ERR(advance(ctx));
+    CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
 
-    // if empty lines exists => skip them
-    while (ctx->currentToken.type == TYPE_EOL)
+    if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
+        // Skip ":"
         CHECK_ERR(advance(ctx));
+        // Check valid type and advance
+        CHECK_ERR(matchDataType(ctx));
     }
 
-    CHECK_ERR(parsePrologue(ctx));
+    // Parse "="
+    CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
 
-    while (ctx->currentToken.type != TYPE_EOF)
+    // Initial value: literal, variable or call; statement end is checked by
+    // caller
+    CHECK_ERR(parseExprOrCall(ctx));
+
+    // Save to AST
+    // CHECK_ERR(createNodeAST(valName, valType, valValue));
+
+    return 0;
+}
+
+int parseVariable(parcerContext* ctx)
+{
+    // next token to check name
+    CHECK_ERR(advance(ctx));
+    CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
+
+
+    if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
-        // skip empty lines
+        // if type declaration exists parse it
+        CHECK_ERR(advance(ctx));
+        CHECK_ERR(matchDataType(ctx));
+    }
+    // parse "="
+    CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
+
+    // Initial value: literal, variable or call; statement end is checked by
+    // caller
+    CHECK_ERR(parseExprOrCall(ctx));
+
+    // save to AST
+    //     CHECK_ERR(createNodeAST(varName, varType, varValue));
+
+
+    return 0;
+}
+
+// Statement separator: EOL | ';' [EOL] | before DEDENT/EOF
+int parseStatementEnd(parcerContext* ctx)
+{
+    // ';' separates statements; ';' at end of line is allowed
+    if (ctx->currentToken.type == TYPE_SEMICOLON)
+    {
+        CHECK_ERR(advance(ctx));
         if (ctx->currentToken.type == TYPE_EOL)
         {
-            CHECK_ERR(advance(ctx));
-            continue;
+            return advance(ctx);
         }
+        return 0;
+    }
 
-        // check for existion of annotation of @main
-        if (ctx->currentToken.type == TYPE_MAIN)
-        {
-            // the main must be def as @main
-            // if the line starts by @main parse function
+    // Newline ends the statement
+    if (ctx->currentToken.type == TYPE_EOL)
+    {
+        return advance(ctx);
+    }
+
+    // Block end or file end terminates statement without consuming
+    if (ctx->currentToken.type == TYPE_DEDENT ||
+        ctx->currentToken.type == TYPE_EOF)
+    {
+        return 0;
+    }
+
+    fprintf(stderr,
+            "Syntax err in line %d: expected end of statement (newline or "
+            "';')\n",
+            ctx->currentToken.line);
+    return 2;
+}
+
+// value -> literal | '()' | ID [ callArgs ]
+// Value of initialization, assignment or call argument
+int parseExprOrCall(parcerContext* ctx)
+{
+    switch (ctx->currentToken.type)
+    {
+        // Literal is a complete value
+        case TYPE_INT_LITERAL:
+        case TYPE_DOUBLE_LITERAL:
+        case TYPE_STRING_LITERAL:
+            return advance(ctx);
+
+        // Unit literal '()'
+        case TYPE_LEFT_PAREN:
             CHECK_ERR(advance(ctx));
-            CHECK_ERR(parseFunction(ctx));
-        }
-        else if (ctx->currentToken.type == TYPE_DEF)
-        {
-            // if the line starts by def parse function
-            CHECK_ERR(parseFunction(ctx));
-        }
-        else
-        {
-            fprintf(stderr, "Syntax err: function def expected (def)\n");
+            return match(ctx, TYPE_RIGHT_PAREN);
+
+        // Variable or function call
+        case TYPE_IDENTIFIER:
+            CHECK_ERR(advance(ctx));
+            if (ctx->currentToken.type == TYPE_LEFT_PAREN)
+            {
+                // Recursion: arguments may contain calls
+                return parseCallArgs(ctx);
+            }
+            return 0;
+
+        default:
+            fprintf(stderr,
+                    "Syntax err in line %d: expected value (literal, variable "
+                    "or call)\n",
+                    ctx->currentToken.line);
             return 2;
+    }
+}
+
+// callArgs -> '(' [ value { ',' value } [ ',' ] ] ')'
+int parseCallArgs(parcerContext* ctx)
+{
+    CHECK_ERR(match(ctx, TYPE_LEFT_PAREN));
+
+    // Parse arguments until ')'
+    while (ctx->currentToken.type != TYPE_RIGHT_PAREN)
+    {
+        // Each argument is consumed or an error is returned, so no endless
+        // loop on EOF
+        CHECK_ERR(parseExprOrCall(ctx));
+
+        // No comma means the list ends
+        if (ctx->currentToken.type != TYPE_COMMA)
+        {
+            break;
         }
+        // Skip comma; trailing comma before ')' is allowed
+        CHECK_ERR(advance(ctx));
+    }
+    return match(ctx, TYPE_RIGHT_PAREN);
+}
+
+int matchDataType(parcerContext* ctx)
+{
+    if (ctx->currentToken.type == TYPE_INT ||
+        ctx->currentToken.type == TYPE_DOUBLE ||
+        ctx->currentToken.type == TYPE_STRING ||
+        ctx->currentToken.type == TYPE_UNIT)
+    {
+        return advance(ctx);
+    }
+    else
+    {
+        fprintf(stderr, "Syntax error in line %d: expected data type\n",
+                ctx->currentToken.line);
+        return 2;
+    }
+}
+
+// function to check the type of token
+int match(parcerContext* ctx, Type expectedType)
+{
+    if (ctx->currentToken.type == expectedType)
+    {
+        return advance(ctx);
+    }
+    else
+    {
+        fprintf(stderr, "Syntax err in line  %d: unpredicted token\n",
+                ctx->currentToken.line);
+        return 2;
+    }
+}
+
+// read next token
+int advance(parcerContext* ctx)
+{
+    // Release previous token before overwriting it
+    freeTokenValue(&ctx->currentToken);
+    // Mark token as empty so a failed read cannot cause double free
+    ctx->currentToken.type = TYPE_ERROR;
+
+    int err = getToken(&(ctx->currentToken), ctx->globalScanner);
+    if (err != 0)
+    {
+        // error in lexer
+        fprintf(stderr, "Lexical err (line %d)\n", ctx->currentToken.line);
+        return 1;
     }
     return 0;
 }
 
-// point of entry in kompiler
-int parse(void)
+// Free heap string owned by the token
+void freeTokenValue(Token* token)
 {
-    // Fully initialize scanner and context
-    Scanner scanner = {.line = 1, .firstRead = 0, .stream = stdin};
-    parcerContext ctx = {.currentToken = {.type = TYPE_ERROR, .line = 1},
-                         .globalScanner = &scanner};
-
-    // start parsing
-    int err = parseProgram(&ctx);
-
-    // Single cleanup point for success and error
-    freeTokenValue(&ctx.currentToken);
-
-    if (err == 0)
+    // Only these token types carry malloc'ed strings
+    if (token->type == TYPE_IDENTIFIER || token->type == TYPE_STRING_LITERAL)
     {
-        // just to test if program runned correctly
-        printf("Syntax analysis finished succesfully (code 0).\n");
+        // identifier and string share one slot in the union
+        free(token->value.identifier);
+        token->value.identifier = NULL;
     }
-    return err;
 }
