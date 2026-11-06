@@ -10,6 +10,6 @@
 int main()
 {
 
-    parse();
-    return 0;
+    int err = parse();
+    return err;
 }
