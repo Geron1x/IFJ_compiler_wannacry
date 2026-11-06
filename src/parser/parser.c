@@ -2,17 +2,10 @@
 // Author:
 // Heorhiy Haziy (xhaziyh00)
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../scanner.h"
-
-// Macro for automatic error propagation
-#define CHECK_ERR(call)             \
-    do                              \
-    {                               \
-        int _err = (call);          \
-        if (_err != 0) return _err; \
-    } while (0)
 
 // GLOBAL VAR
 typedef struct
@@ -22,9 +15,35 @@ typedef struct
 
 } parcerContext;
 
+// Macro for automatic error propagation
+#define CHECK_ERR(call)             \
+    do                              \
+    {                               \
+        int _err = (call);          \
+        if (_err != 0) return _err; \
+                                    \
+    } while (0)
+
+// Free heap string owned by the token
+void freeTokenValue(Token* token)
+{
+    // Only these token types carry malloc'ed strings
+    if (token->type == TYPE_IDENTIFIER || token->type == TYPE_STRING_LITERAL)
+    {
+        // identifier and string share one slot in the union
+        free(token->value.identifier);
+        token->value.identifier = NULL;
+    }
+}
+
 // read next token
 int advance(parcerContext* ctx)
 {
+    // Release previous token before overwriting it
+    freeTokenValue(&ctx->currentToken);
+    // Mark token as empty so a failed read cannot cause double free
+    ctx->currentToken.type = TYPE_ERROR;
+
     int err = getToken(&(ctx->currentToken), ctx->globalScanner);
     if (err != 0)
     {
@@ -77,7 +96,8 @@ int matchDataType(parcerContext* ctx)
 {
     if (ctx->currentToken.type == TYPE_INT ||
         ctx->currentToken.type == TYPE_DOUBLE ||
-        ctx->currentToken.type == TYPE_STRING)
+        ctx->currentToken.type == TYPE_STRING ||
+        ctx->currentToken.type == TYPE_UNIT)
     {
         return advance(ctx);
     }
@@ -94,9 +114,6 @@ int parseValue(parcerContext* ctx)
     CHECK_ERR(advance(ctx));
     CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
 
-
-    // If name doesnt exist parse type
-    CHECK_ERR(advance(ctx));
     if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
         // Skip ":"
@@ -128,7 +145,6 @@ int parseVariable(parcerContext* ctx)
     CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
 
 
-    CHECK_ERR(advance(ctx));
     if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
         // if type declaration exists parse it
@@ -261,17 +277,23 @@ int parseProgram(parcerContext* ctx)
 }
 
 // point of entry in kompiler
-int parse()
+int parse(void)
 {
-    Scanner scanner;
-    scanner.stream = stdin;
-    scanner.line = 1;
-    parcerContext ctx;
-    ctx.globalScanner = &scanner;
+    // Fully initialize scanner and context
+    Scanner scanner = {.line = 1, .firstRead = 0, .stream = stdin};
+    parcerContext ctx = {.currentToken = {.type = TYPE_ERROR, .line = 1},
+                         .globalScanner = &scanner};
 
     // start parsing
-    CHECK_ERR(parseProgram(&ctx));
-    // just to test if program runned correctly
-    printf("Syntax analysis finished succesfully (code 0).\n");
-    return 0;
+    int err = parseProgram(&ctx);
+
+    // Single cleanup point for success and error
+    freeTokenValue(&ctx.currentToken);
+
+    if (err == 0)
+    {
+        // just to test if program runned correctly
+        printf("Syntax analysis finished succesfully (code 0).\n");
+    }
+    return err;
 }
