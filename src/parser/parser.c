@@ -41,6 +41,8 @@ int parsePrologue(parcerContext* ctx);
 int parseFunction(parcerContext* ctx);
 
 // Statements
+int parseBlock(parcerContext* ctx);
+int parseStatement(parcerContext* ctx);
 int parseValue(parcerContext* ctx);
 int parseVariable(parcerContext* ctx);
 int parseStatementEnd(parcerContext* ctx);
@@ -175,50 +177,66 @@ int parseFunction(parcerContext* ctx)
         CHECK_ERR(advance(ctx));
         CHECK_ERR(matchDataType(ctx));
     }
+    // def id(parametry) [: return-data-type] = (parse"=" in the end of def)
+    CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
+    CHECK_ERR(match(ctx, TYPE_EOL));  // must be /n after "="
 
-    CHECK_ERR(match(
-        ctx,
-        TYPE_ASSIGNMENT));  // def id(parametry) [: return-data-type] = (parse
-                            // "=" in the end of def)
-    CHECK_ERR(match(ctx, TYPE_EOL));     // must be /n after "="
-    CHECK_ERR(match(ctx, TYPE_INDENT));  // space neccecary
-    while (ctx->currentToken.type != TYPE_DEDENT)
+    // Function body is an indented block
+    return parseBlock(ctx);
+}
+
+// block -> INDENT stmt sep { stmt sep } DEDENT
+// Indented block of statements (function body, later if/else/while)
+int parseBlock(parcerContext* ctx)
+{
+    CHECK_ERR(match(ctx, TYPE_INDENT));
+
+    // Block cannot be empty, so at least one statement is parsed
+    do
     {
-        switch (ctx->currentToken.type)
-        {
-            case TYPE_VAR:
-                CHECK_ERR(parseVariable(ctx));
-                break;
-            case TYPE_VAL:
-                // parce var some code
-                CHECK_ERR(parseValue(ctx));
-                break;
-            case TYPE_IDENTIFIER:
-                // Skip identifier name
-                CHECK_ERR(advance(ctx));
-                if (ctx->currentToken.type == TYPE_ASSIGNMENT)
-                {
-                    // Assignment: id = value
-                    CHECK_ERR(advance(ctx));
-                    CHECK_ERR(parseExprOrCall(ctx));
-                }
-                else if (ctx->currentToken.type == TYPE_LEFT_PAREN)
-                {
-                    // Function call: id(args)
-                    CHECK_ERR(parseCallArgs(ctx));
-                }
-                // Otherwise bare identifier, e.g. return value at end of body
-                break;
-            default:
-                fprintf(stderr,
-                        "Syntax err: unexpected statement in function body\n");
-                return 2;
-        }
+        CHECK_ERR(parseStatement(ctx));
 
         // Common end of every statement: EOL, ';' or block end
         CHECK_ERR(parseStatementEnd(ctx));
+    } while (ctx->currentToken.type != TYPE_DEDENT);
+
+    return match(ctx, TYPE_DEDENT);
+}
+
+// stmt -> varDef | assign | call | bare identifier
+// One statement of a block
+int parseStatement(parcerContext* ctx)
+{
+    switch (ctx->currentToken.type)
+    {
+        case TYPE_VAR:
+            CHECK_ERR(parseVariable(ctx));
+            break;
+        case TYPE_VAL:
+            // parce var some code
+            CHECK_ERR(parseValue(ctx));
+            break;
+        case TYPE_IDENTIFIER:
+            // Skip identifier name
+            CHECK_ERR(advance(ctx));
+            if (ctx->currentToken.type == TYPE_ASSIGNMENT)
+            {
+                // Assignment: id = value
+                CHECK_ERR(advance(ctx));
+                CHECK_ERR(parseExprOrCall(ctx));
+            }
+            else if (ctx->currentToken.type == TYPE_LEFT_PAREN)
+            {
+                // Function call: id(args)
+                CHECK_ERR(parseCallArgs(ctx));
+            }
+            // Otherwise bare identifier, e.g. return value at end of body
+            break;
+        default:
+            fprintf(stderr,
+                    "Syntax err: unexpected statement in function body\n");
+            return 2;
     }
-    CHECK_ERR(match(ctx, TYPE_DEDENT));
     return 0;
 }
 
