@@ -3,11 +3,11 @@
 // Heorhiy Haziy (xhaziyh00)
 #include "parser.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "../bst.h"
 #include "../scanner.h"
 
 // GLOBAL VAR
@@ -15,7 +15,8 @@ typedef struct
 {
     Token currentToken;
     Scanner* globalScanner;
-
+    Token peekToken;  // lookahead buffer
+    bool hasPeek;     // peekToken holds a token
 } parcerContext;
 
 // Macro for automatic error propagation
@@ -32,6 +33,7 @@ typedef struct
 // Token helpers
 void freeTokenValue(Token* token);
 int advance(parcerContext* ctx);
+int peek(parcerContext* ctx);
 int match(parcerContext* ctx, Type expectedType);
 int matchDataType(parcerContext* ctx);
 
@@ -51,6 +53,10 @@ int parseStatementEnd(parcerContext* ctx);
 int parseExprOrCall(parcerContext* ctx);
 int parseCallArgs(parcerContext* ctx);
 
+
+// ============================================================
+// 2. main function to parce
+// ============================================================
 // point of entry in kompiler
 int parse(void)
 {
@@ -58,13 +64,16 @@ int parse(void)
     Scanner scanner;
     scannerInit(&scanner, stdin);
     parcerContext ctx = {.currentToken = {.type = TYPE_ERROR, .line = 1},
-                         .globalScanner = &scanner};
+                         .globalScanner = &scanner,
+                         .hasPeek = false};
 
     // start parsing
     int err = parseProgram(&ctx);
 
     // Single cleanup point for success and error
     freeTokenValue(&ctx.currentToken);
+    // Free buffered lookahead token too
+    if (ctx.hasPeek) freeTokenValue(&ctx.peekToken);
 
     if (err == 0)
     {
@@ -73,9 +82,10 @@ int parse(void)
     }
     return err;
 }
-// ============================================================
-// 2. main function to parce
-// ============================================================
+
+// =============================================================
+// 3. functions to parse the program
+// ==============================================================
 
 int parseProgram(parcerContext* ctx)
 {
@@ -223,20 +233,20 @@ int parseStatement(parcerContext* ctx)
             CHECK_ERR(parseValue(ctx));
             break;
         case TYPE_IDENTIFIER:
-            // Skip identifier name
-            CHECK_ERR(advance(ctx));
-            if (ctx->currentToken.type == TYPE_ASSIGNMENT)
+            // Look past identifier: assignment or expression
+            CHECK_ERR(peek(ctx));
+            if (ctx->peekToken.type == TYPE_ASSIGNMENT)
             {
                 // Assignment: id = value
-                CHECK_ERR(advance(ctx));
+                CHECK_ERR(advance(ctx));  // identifier
+                CHECK_ERR(advance(ctx));  // '='
                 CHECK_ERR(parseExprOrCall(ctx));
             }
-            else if (ctx->currentToken.type == TYPE_LEFT_PAREN)
+            else
             {
-                // Function call: id(args)
-                CHECK_ERR(parseCallArgs(ctx));
+                // Call or bare identifier (return value)
+                CHECK_ERR(parseExprOrCall(ctx));
             }
-            // Otherwise bare identifier, e.g. return value at end of body
             break;
         default:
             fprintf(stderr,
@@ -433,6 +443,15 @@ int advance(parcerContext* ctx)
     // Mark token as empty so a failed read cannot cause double free
     ctx->currentToken.type = TYPE_ERROR;
 
+    // Take buffered token if peek already read it
+    if (ctx->hasPeek)
+    {
+        // Heap string ownership moves to currentToken
+        ctx->currentToken = ctx->peekToken;
+        ctx->hasPeek = false;
+        return 0;
+    }
+
     int err = getToken(&(ctx->currentToken), ctx->globalScanner);
     if (err != 0)
     {
@@ -440,6 +459,23 @@ int advance(parcerContext* ctx)
         fprintf(stderr, "Lexical err (line %d)\n", ctx->currentToken.line);
         return 1;
     }
+    return 0;
+}
+
+// Fill lookahead buffer, read it via ctx->peekToken
+int peek(parcerContext* ctx)
+{
+    // Already buffered, nothing to read
+    if (ctx->hasPeek) return 0;
+
+    ctx->peekToken.type = TYPE_ERROR;
+    if (getToken(&ctx->peekToken, ctx->globalScanner) != 0)
+    {
+        // Lexical error in lookahead
+        fprintf(stderr, "Lexical err (line %d)\n", ctx->peekToken.line);
+        return 1;
+    }
+    ctx->hasPeek = true;
     return 0;
 }
 
