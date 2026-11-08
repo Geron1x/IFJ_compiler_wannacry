@@ -109,16 +109,6 @@ int strAppend(DynamicString* s, char c)
     return 0;
 }
 
-// reset lexeme string length
-void strClear(DynamicString* s)
-{
-    s->len = 0;
-    if (s->data != NULL)
-    {
-        s->data[0] = '\0';
-    }
-}
-
 // struct for keyword and token mapping
 typedef struct
 {
@@ -397,7 +387,6 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == '0')
                 {
                     STR_TRY(strInit(&attr));
-                    strClear(&attr);
                     STR_TRY(strAppend(&attr, c));
                     state = STATE_ZERO;
                     break;
@@ -413,7 +402,6 @@ int getToken(Token* token, Scanner* scanner)
                         if (c3 == '"')
                         {
                             STR_TRY(strInit(&attr));
-                            strClear(&attr);
                             state = STATE_MULTILINE_STRING;
                             break;
                         }
@@ -430,7 +418,6 @@ int getToken(Token* token, Scanner* scanner)
                     // fallback to single line string state
                     ungetc(c2, scanner->stream);
                     STR_TRY(strInit(&attr));
-                    strClear(&attr);
                     state = STATE_STRING;
                     break;
                 }
@@ -439,7 +426,6 @@ int getToken(Token* token, Scanner* scanner)
                 if (isdigit(c))
                 {
                     STR_TRY(strInit(&attr));
-                    strClear(&attr);
                     STR_TRY(strAppend(&attr, c));
                     state = STATE_INT_LITERAL;
                     break;
@@ -449,7 +435,6 @@ int getToken(Token* token, Scanner* scanner)
                 if (isalpha(c) || c == '_')
                 {
                     STR_TRY(strInit(&attr));
-                    strClear(&attr);
                     STR_TRY(strAppend(&attr, c));
                     state = STATE_IDENTIFIER;
                     break;
@@ -499,7 +484,6 @@ int getToken(Token* token, Scanner* scanner)
                     if (isdigit(next))
                     {
                         STR_TRY(strInit(&attr));
-                        strClear(&attr);
                         STR_TRY(strAppend(&attr, c));
                         STR_TRY(strAppend(&attr, next));
                         state = STATE_DOUBLE_LITERAL;
@@ -588,17 +572,6 @@ int getToken(Token* token, Scanner* scanner)
                 return 0;
             // read multiline block comment
             case STATE_BLOCK_COMMENT:
-
-                if (commentLevel == 0)
-                {
-                    if (hasNewLine && scanner->parenLevel == 0)
-                    {
-                        scanner->atLineStart = true;
-                        token->type = TYPE_EOL;
-                        return 0;
-                    }
-                    state = STATE_START;
-                }
 
                 if (c == EOF)
                 {
