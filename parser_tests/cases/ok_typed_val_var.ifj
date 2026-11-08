@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val s: String = "a"
+  var d: Double = 1.5
