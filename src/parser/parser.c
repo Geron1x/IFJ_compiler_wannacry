@@ -3,38 +3,17 @@
 // Heorhiy Haziy (xhaziyh00)
 #include "parser.h"
 
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "../scanner.h"
-
-// GLOBAL VAR
-typedef struct
-{
-    Token currentToken;
-    Scanner* globalScanner;
-    Token peekToken;  // lookahead buffer
-    bool hasPeek;     // peekToken holds a token
-} parcerContext;
-
-// Macro for automatic error propagation
-#define CHECK_ERR(call)             \
-    do                              \
-    {                               \
-        int _err = (call);          \
-        if (_err != 0) return _err; \
-                                    \
-    } while (0)
+#include "expression.h"
+#include "parser_internal.h"
 
 // Prototypes of internal functions
 
 // Token helpers
 void freeTokenValue(Token* token);
-int advance(parcerContext* ctx);
-int peek(parcerContext* ctx);
-int match(parcerContext* ctx, Type expectedType);
 int matchDataType(parcerContext* ctx);
 
 // Program structure
@@ -48,10 +27,6 @@ int parseStatement(parcerContext* ctx);
 int parseValue(parcerContext* ctx);
 int parseVariable(parcerContext* ctx);
 int parseStatementEnd(parcerContext* ctx);
-
-// Values and calls (call each other recursively)
-int parseExprOrCall(parcerContext* ctx);
-int parseCallArgs(parcerContext* ctx);
 
 
 // ============================================================
@@ -240,12 +215,12 @@ int parseStatement(parcerContext* ctx)
                 // Assignment: id = value
                 CHECK_ERR(advance(ctx));  // identifier
                 CHECK_ERR(advance(ctx));  // '='
-                CHECK_ERR(parseExprOrCall(ctx));
+                CHECK_ERR(parseExpression(ctx));
             }
             else
             {
                 // Call or bare identifier (return value)
-                CHECK_ERR(parseExprOrCall(ctx));
+                CHECK_ERR(parseExpression(ctx));
             }
             break;
         default:
@@ -275,7 +250,7 @@ int parseValue(parcerContext* ctx)
 
     // Initial value: literal, variable or call; statement end is checked by
     // caller
-    CHECK_ERR(parseExprOrCall(ctx));
+    CHECK_ERR(parseExpression(ctx));
 
     // Save to AST
     // CHECK_ERR(createNodeAST(valName, valType, valValue));
@@ -301,7 +276,7 @@ int parseVariable(parcerContext* ctx)
 
     // Initial value: literal, variable or call; statement end is checked by
     // caller
-    CHECK_ERR(parseExprOrCall(ctx));
+    CHECK_ERR(parseExpression(ctx));
 
     // save to AST
     //     CHECK_ERR(createNodeAST(varName, varType, varValue));
@@ -344,43 +319,7 @@ int parseStatementEnd(parcerContext* ctx)
     return 2;
 }
 
-// value -> literal | '()' | ID [ callArgs ]
-// Value of initialization, assignment or call argument
-int parseExprOrCall(parcerContext* ctx)
-{
-    switch (ctx->currentToken.type)
-    {
-        // Literal is a complete value
-        case TYPE_INT_LITERAL:
-        case TYPE_DOUBLE_LITERAL:
-        case TYPE_STRING_LITERAL:
-            return advance(ctx);
-
-        // Unit literal '()'
-        case TYPE_LEFT_PAREN:
-            CHECK_ERR(advance(ctx));
-            return match(ctx, TYPE_RIGHT_PAREN);
-
-        // Variable or function call
-        case TYPE_IDENTIFIER:
-            CHECK_ERR(advance(ctx));
-            if (ctx->currentToken.type == TYPE_LEFT_PAREN)
-            {
-                // Recursion: arguments may contain calls
-                return parseCallArgs(ctx);
-            }
-            return 0;
-
-        default:
-            fprintf(stderr,
-                    "Syntax err in line %d: expected value (literal, variable "
-                    "or call)\n",
-                    ctx->currentToken.line);
-            return 2;
-    }
-}
-
-// callArgs -> '(' [ value { ',' value } [ ',' ] ] ')'
+// callArgs -> '(' [ expr { ',' expr } [ ',' ] ] ')'
 int parseCallArgs(parcerContext* ctx)
 {
     CHECK_ERR(match(ctx, TYPE_LEFT_PAREN));
@@ -390,7 +329,7 @@ int parseCallArgs(parcerContext* ctx)
     {
         // Each argument is consumed or an error is returned, so no endless
         // loop on EOF
-        CHECK_ERR(parseExprOrCall(ctx));
+        CHECK_ERR(parseExpression(ctx));
 
         // No comma means the list ends
         if (ctx->currentToken.type != TYPE_COMMA)
