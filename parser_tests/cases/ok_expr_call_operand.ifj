@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val r = 2 * f(x + 1) - g()
+  

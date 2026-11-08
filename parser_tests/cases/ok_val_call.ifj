@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val n = readInt()
+  val r = f(g(1), n)

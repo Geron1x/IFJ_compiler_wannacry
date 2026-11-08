@@ -6,7 +6,7 @@
 
 #include <stdbool.h>
 
-#include "../scanner.h"
+#include "scanner.h"
 
 // Parser state shared by parser.c and expression.c
 typedef struct
