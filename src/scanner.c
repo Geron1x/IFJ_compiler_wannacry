@@ -117,12 +117,31 @@ typedef struct
 } Keyword;
 
 // list of reserved keywords
-Keyword Keywords[] = {
-    {"def", TYPE_DEF},   {"do", TYPE_DO},         {"Double", TYPE_DOUBLE},
-    {"else", TYPE_ELSE}, {"if", TYPE_IF},         {"import", TYPE_IMPORT},
-    {"Int", TYPE_INT},   {"return", TYPE_RETURN}, {"String", TYPE_STRING},
-    {"then", TYPE_THEN}, {"Unit", TYPE_UNIT},     {"val", TYPE_VAL},
-    {"var", TYPE_VAR},   {"while", TYPE_WHILE},   {NULL, 0}};
+Keyword Keywords[] = {{"def", TYPE_DEF},
+                      {"do", TYPE_DO},
+                      {"Double", TYPE_DOUBLE},
+                      {"else", TYPE_ELSE},
+                      {"if", TYPE_IF},
+                      {"import", TYPE_IMPORT},
+                      {"Int", TYPE_INT},
+                      {"return", TYPE_RETURN},
+                      {"String", TYPE_STRING},
+                      {"then", TYPE_THEN},
+                      {"Unit", TYPE_UNIT},
+                      {"val", TYPE_VAL},
+                      {"var", TYPE_VAR},
+                      {"while", TYPE_WHILE},
+                      {"Boolean", TYPE_BOOLEAN},
+                      {"true", TYPE_TRUE},
+                      {"false", TYPE_FALSE},
+                      {"for", TYPE_FOR},
+                      {"List", TYPE_LIST},
+                      {"case", TYPE_CASE},
+                      {"class", TYPE_CLASS},
+                      {"extension", TYPE_EXTENSION},
+                      {"match", TYPE_MATCH},
+                      {"type", TYPE_TYPE},
+                      {NULL, 0}};
 
 // initialize scanner state and bind input stream
 void scannerInit(Scanner* scanner, FILE* stream)
@@ -342,8 +361,54 @@ int getToken(Token* token, Scanner* scanner)
                     return 0;
                 }
 
+                if (c == '[')
+                {
+                    token->type = TYPE_LEFT_BRACKET;
+                    return 0;
+                }
+
+                if (c == ']')
+                {
+                    token->type = TYPE_RIGHT_BRACKET;
+                    return 0;
+                }
+
+                if (c == '&')
+                {
+                    int next = fgetc(scanner->stream);
+                    if (next == '&')
+                    {
+                        token->type = TYPE_AND;
+                        return 0;
+                    }
+                    ungetc(next, scanner->stream);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                if (c == '|')
+                {
+                    int next = fgetc(scanner->stream);
+                    if (next == '|')
+                    {
+                        token->type = TYPE_OR;
+                        return 0;
+                    }
+                    ungetc(next, scanner->stream);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+
                 if (c == '+')
                 {
+                    int next = fgetc(scanner->stream);
+                    if (next == '+')
+                    {
+                        token->type = TYPE_CONCAT;
+                        return 0;
+                    }
+                    ungetc(next, scanner->stream);
                     token->type = TYPE_ADD;
                     return 0;
                 }
@@ -521,6 +586,11 @@ int getToken(Token* token, Scanner* scanner)
                     token->type = TYPE_EQUAL;
                     return 0;
                 }
+                if (c == '>')
+                {
+                    token->type = TYPE_ARROW;
+                    return 0;
+                }
                 ungetc(c, scanner->stream);
                 token->type = TYPE_ASSIGNMENT;
                 return 0;
@@ -529,6 +599,11 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == '=')
                 {
                     token->type = TYPE_LESSER_EQUAL;
+                    return 0;
+                }
+                if (c == '-')
+                {
+                    token->type = TYPE_LARROW;
                     return 0;
                 }
                 ungetc(c, scanner->stream);
@@ -552,8 +627,8 @@ int getToken(Token* token, Scanner* scanner)
                     return 0;
                 }
                 ungetc(c, scanner->stream);
-                token->type = TYPE_ERROR;
-                return 1;
+                token->type = TYPE_EXCLAMATION;
+                return 0;
             // resolve divide operator or comment
             case STATE_SLASH:
                 if (c == '/')
