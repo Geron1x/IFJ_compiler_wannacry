@@ -39,26 +39,42 @@ typedef struct
     int capacity;
 } DynamicString;
 
-// allocate memory safely
-void* safeMalloc(int size)
-{
-    void* ptr = malloc(size);
-    if (ptr == NULL)
-    {
-        fprintf(stderr, "Out of memory!\n");
-        exit(99);
-    }
-    return ptr;
-}
+#define STR_TRY(call)       \
+    do                      \
+    {                       \
+        int _err = (call);  \
+        if (_err != 0)      \
+        {                   \
+            strFree(&attr); \
+            return _err;    \
+        }                   \
+    } while (0)
+
+#define ALLOC_TOKEN(target, type, size)         \
+    do                                          \
+    {                                           \
+        (target) = (type)malloc(size);          \
+        if ((target) == NULL)                   \
+        {                                       \
+            fprintf(stderr, "Out of memory\n"); \
+            strFree(&attr);                     \
+            return 99;                          \
+        }                                       \
+    } while (0)
 
 // init empty string for lexeme
-bool strInit(DynamicString* s)
+int strInit(DynamicString* s)
 {
     s->capacity = 16;
     s->len = 0;
-    s->data = (char*)safeMalloc(s->capacity * sizeof(char));
+    s->data = (char*)malloc(s->capacity * sizeof(char));
+    if (s->data == NULL)
+    {
+        fprintf(stderr, "Out of memory");
+        return 99;
+    }
     s->data[0] = '\0';
-    return true;
+    return 0;
 }
 
 // free string memory
@@ -74,7 +90,7 @@ void strFree(DynamicString* s)
 }
 
 // add char to lexeme string and resize buffer
-void strAppend(DynamicString* s, char c)
+int strAppend(DynamicString* s, char c)
 {
     if (s->len + 1 >= s->capacity)
     {
@@ -84,12 +100,13 @@ void strAppend(DynamicString* s, char c)
         if (newData == NULL)
         {
             fprintf(stderr, "Out of memory in realloc!\n");
-            exit(99);
+            return 99;
         }
         s->data = newData;
     }
     s->data[s->len++] = c;
     s->data[s->len] = '\0';
+    return 0;
 }
 
 // reset lexeme string length
@@ -269,7 +286,7 @@ int getToken(Token* token, Scanner* scanner)
     }
 
     int commentLevel = 0;  // counter for nested block comments
-    DynamicString attr;
+    DynamicString attr = {.data = NULL, .len = 0, .capacity = 0};
 
     // main loop of finite automaton
     while (true)
@@ -379,9 +396,9 @@ int getToken(Token* token, Scanner* scanner)
 
                 if (c == '0')
                 {
-                    strInit(&attr);
+                    STR_TRY(strInit(&attr));
                     strClear(&attr);
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_ZERO;
                     break;
                 }
@@ -395,7 +412,7 @@ int getToken(Token* token, Scanner* scanner)
                         // check for multiline string literal
                         if (c3 == '"')
                         {
-                            strInit(&attr);
+                            STR_TRY(strInit(&attr));
                             strClear(&attr);
                             state = STATE_MULTILINE_STRING;
                             break;
@@ -405,14 +422,14 @@ int getToken(Token* token, Scanner* scanner)
                             // return empty string literal token
                             ungetc(c3, scanner->stream);
                             token->type = TYPE_STRING_LITERAL;
-                            token->value.string = (char*)safeMalloc(1);
+                            ALLOC_TOKEN(token->value.string, char*, 1);
                             token->value.string[0] = '\0';
                             return 0;
                         }
                     }
                     // fallback to single line string state
                     ungetc(c2, scanner->stream);
-                    strInit(&attr);
+                    STR_TRY(strInit(&attr));
                     strClear(&attr);
                     state = STATE_STRING;
                     break;
@@ -421,9 +438,9 @@ int getToken(Token* token, Scanner* scanner)
                 // start int literal parse
                 if (isdigit(c))
                 {
-                    strInit(&attr);
+                    STR_TRY(strInit(&attr));
                     strClear(&attr);
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_INT_LITERAL;
                     break;
                 }
@@ -431,9 +448,9 @@ int getToken(Token* token, Scanner* scanner)
                 // start identifier or keyword parse
                 if (isalpha(c) || c == '_')
                 {
-                    strInit(&attr);
+                    STR_TRY(strInit(&attr));
                     strClear(&attr);
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_IDENTIFIER;
                     break;
                 }
@@ -481,10 +498,10 @@ int getToken(Token* token, Scanner* scanner)
                     int next = fgetc(scanner->stream);
                     if (isdigit(next))
                     {
-                        strInit(&attr);
+                        STR_TRY(strInit(&attr));
                         strClear(&attr);
-                        strAppend(&attr, c);
-                        strAppend(&attr, next);
+                        STR_TRY(strAppend(&attr, c));
+                        STR_TRY(strAppend(&attr, next));
                         state = STATE_DOUBLE_LITERAL;
                         break;
                     }
@@ -665,14 +682,14 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_ZERO:
                 if (c == '.')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_DOT;
                     break;
                 }
 
                 if (c == 'e' || c == 'E')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP;
                     break;
                 }
@@ -696,7 +713,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     break;
                 }
 
@@ -708,14 +725,14 @@ int getToken(Token* token, Scanner* scanner)
 
                 if (c == '.')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_DOT;
                     break;
                 }
 
                 if (c == 'e' || c == 'E')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP;
                     break;
                 }
@@ -730,7 +747,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_INT_UNDERSCORE:
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_INT_LITERAL;
                     break;
                 }
@@ -742,7 +759,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_DOT:
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_DOUBLE_LITERAL;
                     break;
                 }
@@ -754,7 +771,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_DOUBLE_LITERAL:
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     break;
                 }
 
@@ -766,7 +783,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 if (c == 'e' || c == 'E')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP;
                     break;
                 }
@@ -789,7 +806,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_DOUBLE_UNDERSCORE:
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_DOUBLE_LITERAL;
                     break;
                 }
@@ -802,14 +819,14 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_EXP:
                 if (c == '+' || c == '-')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP_SIGN;
                     break;
                 }
 
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP_LITERAL;
                     break;
                 }
@@ -822,7 +839,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_EXP_SIGN:
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP_LITERAL;
                     break;
                 }
@@ -836,7 +853,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_EXP_LITERAL:
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     break;
                 }
 
@@ -864,7 +881,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_EXP_UNDERSCORE:
                 if (isdigit(c))
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP_LITERAL;
                     break;
                 }
@@ -877,7 +894,7 @@ int getToken(Token* token, Scanner* scanner)
             case STATE_IDENTIFIER:
                 if (isalnum(c) || c == '_')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     break;
                 }
                 ungetc(c, scanner->stream);
@@ -905,7 +922,7 @@ int getToken(Token* token, Scanner* scanner)
                 // allocate memory for identifier lexeme
                 if (token->type == TYPE_IDENTIFIER)
                 {
-                    token->value.identifier = (char*)safeMalloc(attr.len + 1);
+                    ALLOC_TOKEN(token->value.identifier, char*, attr.len + 1);
                     strcpy(token->value.identifier, attr.data);
                 }
 
@@ -917,7 +934,7 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == '"')
                 {
                     token->type = TYPE_STRING_LITERAL;
-                    token->value.string = (char*)safeMalloc(attr.len + 1);
+                    ALLOC_TOKEN(token->value.string, char*, attr.len + 1);
                     strcpy(token->value.string, attr.data);
 
                     strFree(&attr);
@@ -937,42 +954,42 @@ int getToken(Token* token, Scanner* scanner)
                     return 1;
                 }
 
-                strAppend(&attr, c);
+                STR_TRY(strAppend(&attr, c));
                 break;
 
             // read string escape sequence
             case STATE_STRING_ESC:
                 if (c == '"')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_STRING;
                     break;
                 }
 
                 if (c == 'n')
                 {
-                    strAppend(&attr, '\n');
+                    STR_TRY(strAppend(&attr, '\n'));
                     state = STATE_STRING;
                     break;
                 }
 
                 if (c == 't')
                 {
-                    strAppend(&attr, '\t');
+                    STR_TRY(strAppend(&attr, '\t'));
                     state = STATE_STRING;
                     break;
                 }
 
                 if (c == 'r')
                 {
-                    strAppend(&attr, '\r');
+                    STR_TRY(strAppend(&attr, '\r'));
                     state = STATE_STRING;
                     break;
                 }
 
                 if (c == '\\')
                 {
-                    strAppend(&attr, c);
+                    STR_TRY(strAppend(&attr, c));
                     state = STATE_STRING;
                     break;
                 }
@@ -993,7 +1010,7 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == '\n')
                 {
                     scanner->line++;
-                    strAppend(&attr, '\n');
+                    STR_TRY(strAppend(&attr, '\n'));
                     break;
                 }
 
@@ -1007,23 +1024,23 @@ int getToken(Token* token, Scanner* scanner)
                         if (c3 == '"')
                         {
                             token->type = TYPE_STRING_LITERAL;
-                            token->value.string =
-                                (char*)safeMalloc(attr.len + 1);
+                            ALLOC_TOKEN(token->value.string, char*,
+                                        attr.len + 1);
                             strcpy(token->value.string, attr.data);
                             strFree(&attr);
                             return 0;
                         }
 
-                        strAppend(&attr, '"');
-                        strAppend(&attr, '"');
+                        STR_TRY(strAppend(&attr, '"'));
+                        STR_TRY(strAppend(&attr, '"'));
                         ungetc(c3, scanner->stream);
                         break;
                     }
-                    strAppend(&attr, '"');
+                    STR_TRY(strAppend(&attr, '"'));
                     ungetc(c2, scanner->stream);
                     break;
                 }
-                strAppend(&attr, c);
+                STR_TRY(strAppend(&attr, c));
                 break;
         }
     }
