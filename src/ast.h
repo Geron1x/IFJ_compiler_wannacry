@@ -85,12 +85,12 @@ Errors astCreateWhile(astNode* condition, astNode* body, astNode** retNode);
  * @brief Create a node to define a function (AST_FUNC)
  */
 Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
-                        astNode** retNode);
+                        astNode** retNode, bool isMain);
 /**
  * @brief Create a node to define a variable or const (AST_STAT_VAR)
  */
-Errors astCreateVarDef(const char* key, bool isConst, astNode* expr,
-                       astNode** retNode);
+Errors astCreateVarDef(const char* key, dataType type, bool isConst,
+                       astNode* expr, astNode** retNode);
 /**
  * @brief Create a node to return
  * a value (or Unit) from a function (AST_STAT_RETURN)

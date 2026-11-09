@@ -116,10 +116,10 @@ Errors astBlockAppend(astNode* block, astNode* statement)
 
     return 0;
 }
-Errors astCreateVarDef(const char* key, bool isConst, astNode* expr,
-                       astNode** retNode)
+Errors astCreateVarDef(const char* key, dataType type, bool isConst,
+                       astNode* expr, astNode** retNode)
 {
-    if (key == NULL || expr == NULL || retNode == NULL)
+    if (key == NULL || retNode == NULL)
     {
         return ERROR_INTERNAL;
     }
@@ -128,7 +128,7 @@ Errors astCreateVarDef(const char* key, bool isConst, astNode* expr,
     {
         return ERROR_INTERNAL;
     }
-    astInitNode(*retNode, AST_STAT_VAR, TYPE_UNIT);
+    astInitNode(*retNode, AST_STAT_VAR, type);
 
     (*retNode)->data.varData.key = malloc(sizeof(char) * (strlen(key) + 1));
 
@@ -141,13 +141,16 @@ Errors astCreateVarDef(const char* key, bool isConst, astNode* expr,
     strcpy((*retNode)->data.varData.key, key);
     (*retNode)->data.varData.isConst = isConst;
 
-    Errors status = astBlockAppend(*retNode, expr);
-    if (status != 0)
+    if (expr != NULL)
     {
-        free((*retNode)->data.varData.key);
-        free(*retNode);
-        *retNode = NULL;
-        return status;
+        Errors status = astBlockAppend(*retNode, expr);
+        if (status != 0)
+        {
+            free((*retNode)->data.varData.key);
+            free(*retNode);
+            *retNode = NULL;
+            return status;
+        }
     }
 
     return 0;
@@ -228,7 +231,7 @@ Errors astCreateWhile(astNode* condition, astNode* body, astNode** retNode)
 }
 
 Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
-                        astNode** retNode)
+                        astNode** retNode, bool isMain)
 {
     if (key == NULL || body == NULL || retNode == NULL)
     {
@@ -247,7 +250,7 @@ Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
         return ERROR_INTERNAL;
     }
     strcpy((*retNode)->data.funcData.key, key);
-
+    (*retNode)->data.funcData.isMain = isMain;
     Errors status = astBlockAppend(*retNode, body);
     if (status != 0)
     {

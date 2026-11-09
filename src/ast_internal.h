@@ -30,6 +30,7 @@ struct astNode
         struct
         {
             char* key; /**< function name */
+            bool isMain;
         } funcData;
     } data;
 };
