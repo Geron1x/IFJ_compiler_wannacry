@@ -33,7 +33,7 @@ struct functionData
 
 struct nodeData
 {
-    idType type;
+    idType type; /**< shows which union member is active */
 
     union
     {
@@ -45,7 +45,7 @@ typedef struct scope
 {
     bstNode* tree; /**< store all the variable info, several in one symtable,
                       cleared and filled throughout program life */
-    struct scope* prev;
+    struct scope* prev; /**< links to the enclosing scope */
 } scope;
 
 
@@ -62,7 +62,7 @@ struct symtable
 
 Errors symtableBaseFuncInit(symtable* funcTable)
 {
-    /** checking whether funceTable is even present */
+
     if (funcTable == NULL)
     {
         return ERROR_INTERNAL;
@@ -73,10 +73,6 @@ Errors symtableBaseFuncInit(symtable* funcTable)
     funcTable->scopeLevel = 0;
     funcTable->funcTree = NULL;
 
-    /** allocatic temporary arrays to add into symtable all basic function
-     *  In semantic analysis or anywhere else you should remember to free these
-     * temporary array because symtableInsertFunc does not free memory for you
-     */
     dataType* paramsPrint = malloc(sizeof(dataType) * 1);
     dataType* paramsToStr = malloc(sizeof(dataType) * 1);
     dataType* paramsToInt = malloc(sizeof(dataType) * 1);
@@ -85,9 +81,6 @@ Errors symtableBaseFuncInit(symtable* funcTable)
     dataType* paramsOrd = malloc(sizeof(dataType) * 2);
     dataType* paramsChr = malloc(sizeof(dataType) * 1);
 
-    /** checking whether even one failed malloc was detected
-     *  if so - clean all the temporary arrays and return error
-     */
     if (!paramsPrint || !paramsToStr || !paramsToInt || !paramsStrLength ||
         !paramsSubStr || !paramsOrd || !paramsChr)
     {
@@ -180,9 +173,7 @@ Errors symtableBaseFuncInit(symtable* funcTable)
         status =
             symtableInsertFunc(funcTable, "chr", TYPE_STRING, 1, paramsChr);
     }
-    /** clean all tempopary arrays
-     *  dont forget to do so in other parts when inserting value into funcTable
-     */
+
     free(paramsPrint);
     free(paramsToStr);
     free(paramsToInt);
@@ -204,7 +195,6 @@ Errors symtableInsertFunc(symtable* symtable, const char* key,
                           dataType returnType, int paramCount,
                           const dataType* paramType)
 {
-    /** check whether symtable is present and key is valid */
     if (symtable == NULL || key == NULL)
     {
         return ERROR_INTERNAL;
@@ -215,39 +205,33 @@ Errors symtableInsertFunc(symtable* symtable, const char* key,
     {
         return ERROR_INTERNAL;
     }
-    /** inserting function information into new nodeData */
+
     data->type = TYPE_FUNCTION;
     data->funcData.paramCount = paramCount;
     data->funcData.isDefined = true;
     data->funcData.returnType = returnType;
-    /** check whether function has any parameters */
+
     if (paramCount > 0 && paramType != NULL)
     {
-        /** if so create array to store all the data types of params */
+        /* Functions own their parameter type array */
         data->funcData.paramType = malloc(sizeof(dataType) * paramCount);
         if (data->funcData.paramType == NULL)
         {
             free(data);
             return ERROR_INTERNAL;
         }
-        /** copy from inserted array all the parameter types into its own
-         * array*/
         memcpy(data->funcData.paramType, paramType,
                sizeof(dataType) * paramCount);
     }
     else
     {
-        /** if no params given just NULL */
         data->funcData.paramType = NULL;
     }
-    /** inserting new node with the data we got and store feedback code from
-     *  bst lib*/
+
     bstStatus status = bstInsert(&(symtable->funcTree), key, data);
-    /** check whether all went smooth */
+
     if (status != BST_INSERTED)
     {
-        /** it did not, the node either already present or allocation
-         * failed, clear all created mess and send feedback code*/
         if (data->funcData.paramType != NULL)
         {
             free(data->funcData.paramType);
@@ -270,7 +254,6 @@ Errors symtableInsertFunc(symtable* symtable, const char* key,
 
 Errors stackPush(symtable* symtable)
 {
-    /** checking presence of symtable */
     if (symtable == NULL)
     {
         return ERROR_INTERNAL;
@@ -280,36 +263,28 @@ Errors stackPush(symtable* symtable)
     {
         return ERROR_INTERNAL;
     }
-    /** placing current top stack as a stack after new Scope */
+
     newScope->prev = symtable->top;
-    /** tree is yet to build */
     newScope->tree = NULL;
-    /** placing the new scope on top of the stack */
     symtable->top = newScope;
-    /** deepening scope level by one */
     symtable->scopeLevel++;
     return 0;
 }
 
 void stackPop(symtable* symtable)
 {
-    /** checking presence of symtable and at least one scope */
     if (symtable == NULL || symtable->top == NULL)
     {
         return;
     }
-    /** saving current top of the stack into temp var */
     scope* temp = symtable->top;
     /** popping the stack  */
     symtable->top = temp->prev;
-    /** clearing local tree from previous top of the stack */
+
     bstDestroy(&(temp->tree), eraseData);
-    /** clearing the stack (scope) itself */
     free(temp);
-    /** checking whether scopeLevel is not going to go negative */
     if (symtable->scopeLevel > 0)
     {
-        /** dectrementing scope level, because one stack got deleted */
         symtable->scopeLevel--;
     }
 }
@@ -317,8 +292,6 @@ void stackPop(symtable* symtable)
 Errors stackInsertVar(symtable* symtable, const char* key, dataType type,
                       bool isConst, bool isInit)
 {
-    /** check whether symtable is present and atleast
-     * one scope is present too */
     if (symtable == NULL || symtable->top == NULL)
     {
         return ERROR_INTERNAL;
@@ -328,18 +301,14 @@ Errors stackInsertVar(symtable* symtable, const char* key, dataType type,
     {
         return ERROR_INTERNAL;
     }
-    /** set given variable info into created nodeData element*/
+
     newData->type = TYPE_VARIABLE;
     newData->varData.type = type;
     newData->varData.isConst = isConst;
     newData->varData.isInit = isInit;
     newData->varData.instanceNum = symtable->varInstanceCounter;
-    /** insert a new node which contains nodeData with all the info that was
-     * passed to the function about variable, create status variable to get
-     * feedback code */
+
     bstStatus status = bstInsert(&(symtable->top->tree), key, newData);
-    /** status check, in case of unsuccessful insertion clear created data on
-     * heap */
     switch (status)
     {
         /** element was added successfully, increment instance counter */
@@ -365,8 +334,6 @@ Errors stackInsertVar(symtable* symtable, const char* key, dataType type,
 
 nodeData* stackFindVar(const char* key, symtable* symtable)
 {
-    /** checking whether key is valid, symtable is present, there is atleast one
-     * scope */
     if (key == NULL || symtable == NULL || symtable->top == NULL)
     {
         return NULL;
@@ -385,7 +352,7 @@ nodeData* stackFindVar(const char* key, symtable* symtable)
 }
 void stackDestroy(symtable* symtable)
 {
-    /** checking whether symtable is present */
+
     if (symtable == NULL)
     {
         return;
@@ -393,25 +360,21 @@ void stackDestroy(symtable* symtable)
     /** pass through all stack and clear them */
     while (symtable->top != NULL)
     {
-        /** saving the current top of the stack */
         scope* temp = symtable->top;
         /** popping the stack */
         symtable->top = symtable->top->prev;
-        /** if the tree is present, clear it */
         if (temp->tree != NULL)
         {
-            /** clearing local tree */
             bstDestroy(&(temp->tree), eraseData);
         }
-        /** the the previous top */
+        /** top of the stack is empty and should point at NULL */
         free(temp);
     }
-    /** top of the stack is empty and should point at NULL */
     symtable->top = NULL;
 }
 Errors symtableInit(symtable** symTable)
 {
-    /** checking whether the address of ptr to symtable we got is even valid */
+
     if (symTable == NULL)
     {
         return ERROR_INTERNAL;
@@ -422,7 +385,7 @@ Errors symtableInit(symtable** symTable)
     {
         return ERROR_INTERNAL;
     }
-    /** setting base values for symtable */
+
     newTable->funcTree = NULL;
     newTable->top = NULL;
     newTable->scopeLevel = 0;
@@ -434,7 +397,6 @@ Errors symtableInit(symtable** symTable)
 }
 void symtableDestroy(symtable* symtable)
 {
-    /** checking whether symtable present */
     if (symtable == NULL)
     {
         return;
