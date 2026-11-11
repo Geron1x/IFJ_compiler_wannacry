@@ -28,7 +28,11 @@ typedef enum
     STATE_EXP_UNDERSCORE,
     STATE_STRING,
     STATE_STRING_ESC,
-    STATE_MULTILINE_STRING
+    STATE_MULTILINE_STRING,
+    STATE_INTERP_SINGLE,
+    STATE_INTERP_ESC,
+    STATE_INTERP_MULTI,
+    STATE_INTERP_ID
 } State;
 
 // dynamic string to save lexeme
@@ -156,12 +160,25 @@ void scannerInit(Scanner* scanner, FILE* stream)
     scanner->atLineStart = true;
     scanner->parenLevel = 0;
     scanner->lfSeen = false;
+
+    scanner->modeStack[0] = MODE_DEFAULT;
+    scanner->modeTop = 0;
 }
 
 // read next token from input stream
 int getToken(Token* token, Scanner* scanner)
 {
-    State state = STATE_START;    // set start state of automaton
+    State state = STATE_START;  // set start state of automaton
+
+    if (scanner->modeStack[scanner->modeTop] == MODE_INTERP_SINGLE)
+    {
+        state = STATE_INTERP_SINGLE;
+    }
+    else if (scanner->modeStack[scanner->modeTop] == MODE_INTERP_MULTI)
+    {
+        state = STATE_INTERP_MULTI;
+    }
+
     token->line = scanner->line;  // save line number for token
     bool hasNewLine = false;      // flag to track newline in comments
     token->lfBefore =
@@ -177,7 +194,8 @@ int getToken(Token* token, Scanner* scanner)
     }
 
     // check indent logic at start of line
-    while (scanner->atLineStart)
+    while (scanner->atLineStart &&
+           scanner->modeStack[scanner->modeTop] == MODE_DEFAULT)
     {
         // reset space counter
         int spaces = 0;
@@ -383,6 +401,21 @@ int getToken(Token* token, Scanner* scanner)
                     return 0;
                 }
 
+                // handle right brace returning from interpolation expression
+                if (c == '}')
+                {
+                    if (scanner->modeTop > 0 &&
+                        scanner->modeStack[scanner->modeTop] == MODE_DEFAULT)
+                    {
+                        scanner
+                            ->modeTop--;  // pop MODE_DEFAULT, return to string
+                        token->type = TYPE_RIGHT_BRACE;
+                        return 0;
+                    }
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
                 if (c == '&')
                 {
                     int next = fgetc(scanner->stream);
@@ -504,6 +537,41 @@ int getToken(Token* token, Scanner* scanner)
                     STR_TRY(strAppend(&attr, c));
                     state = STATE_INT_LITERAL;
                     break;
+                }
+
+                // check for interpolated string prefix
+                if (c == 's')
+                {
+                    int next1 = fgetc(scanner->stream);
+                    if (next1 == '"')
+                    {
+                        int next2 = fgetc(scanner->stream);
+                        if (next2 == '"')
+                        {
+                            int next3 = fgetc(scanner->stream);
+                            // multiline interpolated string start: s"""
+                            if (next3 == '"')
+                            {
+                                scanner->modeTop++;
+                                scanner->modeStack[scanner->modeTop] =
+                                    MODE_INTERP_MULTI;
+                                token->type = TYPE_INTERP_START;
+                                return 0;
+                            }
+                            // fallback if only s"" encountered
+                            ungetc(next3, scanner->stream);
+                        }
+                        ungetc(next2, scanner->stream);
+
+                        // singleline interpolated string start: s"
+                        scanner->modeTop++;
+                        scanner->modeStack[scanner->modeTop] =
+                            MODE_INTERP_SINGLE;
+                        token->type = TYPE_INTERP_START;
+                        return 0;
+                    }
+                    // not an interpolated string prefix, rollback character
+                    ungetc(next1, scanner->stream);
                 }
 
                 // start identifier or keyword parse
@@ -1103,6 +1171,270 @@ int getToken(Token* token, Scanner* scanner)
                     ungetc(c2, scanner->stream);
                     break;
                 }
+
+                STR_TRY(strAppend(&attr, c));
+                break;
+                // read characters inside singleline interpolated string
+            case STATE_INTERP_SINGLE:
+                if (attr.data == NULL)
+                {
+                    STR_TRY(strInit(&attr));
+                }
+
+                if (c == EOF)
+                {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                // closing quote of interpolated string
+                if (c == '"')
+                {
+                    // if string part accumulated, return it first
+                    if (attr.len > 0)
+                    {
+                        ungetc(c, scanner->stream);
+                        token->type = TYPE_STR_PART;
+                        ALLOC_TOKEN(token->value.string, char*, attr.len + 1);
+                        strcpy(token->value.string, attr.data);
+                        strFree(&attr);
+                        return 0;
+                    }
+                    // finish interpolated string
+                    scanner->modeTop--;
+                    token->type = TYPE_INTERP_END;
+                    strFree(&attr);
+                    return 0;
+                }
+
+                // interpolation entry or escaped dollar
+                if (c == '$')
+                {
+                    // return accumulated text before interpolation
+                    if (attr.len > 0)
+                    {
+                        ungetc(c, scanner->stream);
+                        token->type = TYPE_STR_PART;
+                        ALLOC_TOKEN(token->value.string, char*, attr.len + 1);
+                        strcpy(token->value.string, attr.data);
+                        strFree(&attr);
+                        return 0;
+                    }
+
+                    int next = fgetc(scanner->stream);
+
+                    // escaped dollar: $$
+                    if (next == '$')
+                    {
+                        STR_TRY(strAppend(&attr, '$'));
+                        break;
+                    }
+
+                    // embedded expression: ${expr}
+                    if (next == '{')
+                    {
+                        scanner->modeTop++;
+                        scanner->modeStack[scanner->modeTop] = MODE_DEFAULT;
+                        token->type = TYPE_LEFT_BRACE;
+                        strFree(&attr);
+                        return 0;
+                    }
+
+                    // embedded variable: $id
+                    if (isalpha(next) || next == '_')
+                    {
+                        ungetc(next, scanner->stream);
+                        state = STATE_INTERP_ID;
+                        break;
+                    }
+
+                    // invalid character after dollar
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                // escape sequence start
+                if (c == '\\')
+                {
+                    state = STATE_INTERP_ESC;
+                    break;
+                }
+
+                // unescaped newline not allowed in singleline strings
+                if (c == '\n')
+                {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                STR_TRY(strAppend(&attr, c));
+                break;
+
+            // read escape sequence inside interpolated string
+            case STATE_INTERP_ESC:
+                if (c == '"')
+                {
+                    STR_TRY(strAppend(&attr, '"'));
+                }
+                else if (c == 'n')
+                {
+                    STR_TRY(strAppend(&attr, '\n'));
+                }
+                else if (c == 't')
+                {
+                    STR_TRY(strAppend(&attr, '\t'));
+                }
+                else if (c == 'r')
+                {
+                    STR_TRY(strAppend(&attr, '\r'));
+                }
+                else if (c == '\\')
+                {
+                    STR_TRY(strAppend(&attr, '\\'));
+                }
+                else
+                {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+                state = STATE_INTERP_SINGLE;
+                break;
+
+            // read variable identifier after $
+            case STATE_INTERP_ID:
+                if (attr.data == NULL)
+                {
+                    STR_TRY(strInit(&attr));
+                }
+
+                if (isalnum(c) || c == '_')
+                {
+                    STR_TRY(strAppend(&attr, c));
+                    break;
+                }
+
+                ungetc(c, scanner->stream);
+
+                // single underscore cannot be an identifier
+                if (attr.len == 1 && attr.data[0] == '_')
+                {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                token->type = TYPE_IDENTIFIER;
+                ALLOC_TOKEN(token->value.identifier, char*, attr.len + 1);
+                strcpy(token->value.identifier, attr.data);
+                strFree(&attr);
+                return 0;
+
+            // read characters inside multiline interpolated string
+            case STATE_INTERP_MULTI:
+                if (attr.data == NULL)
+                {
+                    STR_TRY(strInit(&attr));
+                }
+
+                if (c == EOF)
+                {
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
+                // newlines are part of multiline strings
+                if (c == '\n')
+                {
+                    scanner->line++;
+                    STR_TRY(strAppend(&attr, '\n'));
+                    break;
+                }
+
+                // check triple quote closing
+                if (c == '"')
+                {
+                    int c2 = fgetc(scanner->stream);
+                    if (c2 == '"')
+                    {
+                        int c3 = fgetc(scanner->stream);
+                        if (c3 == '"')
+                        {
+                            // emit remaining text if buffer not empty
+                            if (attr.len > 0)
+                            {
+                                ungetc('"', scanner->stream);
+                                ungetc('"', scanner->stream);
+                                ungetc('"', scanner->stream);
+                                token->type = TYPE_STR_PART;
+                                ALLOC_TOKEN(token->value.string, char*,
+                                            attr.len + 1);
+                                strcpy(token->value.string, attr.data);
+                                strFree(&attr);
+                                return 0;
+                            }
+                            // finish multiline interpolated string
+                            scanner->modeTop--;
+                            token->type = TYPE_INTERP_END;
+                            strFree(&attr);
+                            return 0;
+                        }
+                        STR_TRY(strAppend(&attr, '"'));
+                        STR_TRY(strAppend(&attr, '"'));
+                        ungetc(c3, scanner->stream);
+                        break;
+                    }
+                    STR_TRY(strAppend(&attr, '"'));
+                    ungetc(c2, scanner->stream);
+                    break;
+                }
+
+                // interpolation entry or escaped dollar in multiline
+                if (c == '$')
+                {
+                    if (attr.len > 0)
+                    {
+                        ungetc(c, scanner->stream);
+                        token->type = TYPE_STR_PART;
+                        ALLOC_TOKEN(token->value.string, char*, attr.len + 1);
+                        strcpy(token->value.string, attr.data);
+                        strFree(&attr);
+                        return 0;
+                    }
+
+                    int next = fgetc(scanner->stream);
+
+                    if (next == '$')
+                    {
+                        STR_TRY(strAppend(&attr, '$'));
+                        break;
+                    }
+
+                    if (next == '{')
+                    {
+                        scanner->modeTop++;
+                        scanner->modeStack[scanner->modeTop] = MODE_DEFAULT;
+                        token->type = TYPE_LEFT_BRACE;
+                        strFree(&attr);
+                        return 0;
+                    }
+
+                    if (isalpha(next) || next == '_')
+                    {
+                        ungetc(next, scanner->stream);
+                        state = STATE_INTERP_ID;
+                        break;
+                    }
+
+                    strFree(&attr);
+                    token->type = TYPE_ERROR;
+                    return 1;
+                }
+
                 STR_TRY(strAppend(&attr, c));
                 break;
         }
