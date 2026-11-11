@@ -98,7 +98,12 @@ typedef enum
     TYPE_OR,
     TYPE_CONCAT,
     TYPE_ARROW,
-    TYPE_LARROW
+    TYPE_LARROW,
+    TYPE_INTERP_START,
+    TYPE_INTERP_END,
+    TYPE_STR_PART,
+    TYPE_LEFT_BRACE,
+    TYPE_RIGHT_BRACE
 } Type;
 
 /**
@@ -112,6 +117,17 @@ typedef struct
     int line;
     bool lfBefore;
 } Token;
+
+/**
+ * @enum ScannerMode
+ * @brief Context modes for handling string interpolation nesting.
+ */
+typedef enum
+{
+    MODE_DEFAULT,
+    MODE_INTERP_SINGLE,
+    MODE_INTERP_MULTI
+} ScannerMode;
 
 /**
  * @struct Scanner
@@ -130,6 +146,9 @@ typedef struct
     int atLineStart;
     int parenLevel;
     bool lfSeen;
+
+    ScannerMode modeStack[32];
+    int modeTop;
 } Scanner;
 
 /**
