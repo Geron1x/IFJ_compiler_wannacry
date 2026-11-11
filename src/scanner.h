@@ -110,6 +110,7 @@ typedef struct
     Val value;
     Type type;
     int line;
+    bool lfBefore;
 } Token;
 
 /**
@@ -128,6 +129,7 @@ typedef struct
     int pendingDedents;
     int atLineStart;
     int parenLevel;
+    bool lfSeen;
 } Scanner;
 
 /**
