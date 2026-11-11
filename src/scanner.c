@@ -155,6 +155,7 @@ void scannerInit(Scanner* scanner, FILE* stream)
     scanner->pendingDedents = 0;
     scanner->atLineStart = true;
     scanner->parenLevel = 0;
+    scanner->lfSeen = false;
 }
 
 // read next token from input stream
@@ -163,6 +164,9 @@ int getToken(Token* token, Scanner* scanner)
     State state = STATE_START;    // set start state of automaton
     token->line = scanner->line;  // save line number for token
     bool hasNewLine = false;      // flag to track newline in comments
+    token->lfBefore =
+        scanner->lfSeen;      // save flag indicating preceding newline
+    scanner->lfSeen = false;  // reset newline flag for next token
 
     // emit pending dedent tokens first
     if (scanner->pendingDedents > 0)
@@ -318,6 +322,7 @@ int getToken(Token* token, Scanner* scanner)
                     scanner->line++;
                     if (scanner->parenLevel > 0)
                     {
+                        scanner->lfSeen = true;
                         continue;
                     }
                     token->line = scanner->line;
@@ -363,12 +368,17 @@ int getToken(Token* token, Scanner* scanner)
 
                 if (c == '[')
                 {
+                    scanner->parenLevel++;
                     token->type = TYPE_LEFT_BRACKET;
                     return 0;
                 }
 
                 if (c == ']')
                 {
+                    if (scanner->parenLevel > 0)
+                    {
+                        scanner->parenLevel--;
+                    }
                     token->type = TYPE_RIGHT_BRACKET;
                     return 0;
                 }
@@ -691,6 +701,10 @@ int getToken(Token* token, Scanner* scanner)
                                 token->type = TYPE_EOL;
                                 return 0;
                             }
+                            else
+                            {
+                                scanner->lfSeen = true;
+                            }
                             state = STATE_START;
                         }
                     }
@@ -709,6 +723,7 @@ int getToken(Token* token, Scanner* scanner)
                     scanner->line++;
                     if (scanner->parenLevel > 0)
                     {
+                        scanner->lfSeen = true;
                         state = STATE_START;
                         break;
                     }
