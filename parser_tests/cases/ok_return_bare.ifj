@@ -1,0 +1,13 @@
+import ifj26.*
+def f(): Unit =
+  return
+def g(): Unit =
+  return; print(1)
+def h(x: Int): Int =
+  print(x)
+  return -x
+def k(): Unit =
+  print(1)
+  return
+@main def m(): Unit =
+  return
