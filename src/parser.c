@@ -194,7 +194,7 @@ int parseBlock(parcerContext* ctx)
     return match(ctx, TYPE_DEDENT);
 }
 
-// stmt -> varDef | assign | call | bare identifier
+// stmt -> varDef | assign | expr
 // One statement of a block
 int parseStatement(parcerContext* ctx)
 {
@@ -223,6 +223,20 @@ int parseStatement(parcerContext* ctx)
                 CHECK_ERR(parseExpression(ctx));
             }
             break;
+        case TYPE_INT_LITERAL:
+        case TYPE_DOUBLE_LITERAL:
+        case TYPE_STRING_LITERAL:
+        case TYPE_LEFT_PAREN:
+            // Expression statement
+            CHECK_ERR(parseExpression(ctx));
+            break;
+        case TYPE_ADD:
+        case TYPE_SUB:
+            // Spec: logical line cannot start with operator
+            fprintf(stderr,
+                    "Syntax err in line %d: line cannot start with operator\n",
+                    ctx->currentToken.line);
+            return ERROR_SYNTAX;
         default:
             fprintf(stderr,
                     "Syntax err: unexpected statement in function body\n");
