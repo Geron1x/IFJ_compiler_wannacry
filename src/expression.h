@@ -10,4 +10,7 @@
 // Returns 0 ok, 1 lexical, 2 syntax, 99 out of memory
 int parseExpression(parcerContext* ctx);
 
+// True if token can begin an expression
+bool canStartExpression(Type type);
+
 #endif

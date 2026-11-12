@@ -293,3 +293,21 @@ int parseExpression(parcerContext* ctx)
     free(stack.items);
     return err;
 }
+
+// Tokens that can begin an expression: operand, '(' or unary operator
+bool canStartExpression(Type type)
+{
+    switch (type)
+    {
+        case TYPE_IDENTIFIER:
+        case TYPE_INT_LITERAL:
+        case TYPE_DOUBLE_LITERAL:
+        case TYPE_STRING_LITERAL:
+        case TYPE_LEFT_PAREN:
+        case TYPE_ADD:
+        case TYPE_SUB:
+            return true;
+        default:
+            return false;
+    }
+}

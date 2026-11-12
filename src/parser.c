@@ -26,6 +26,7 @@ int parseBlock(parcerContext* ctx);
 int parseStatement(parcerContext* ctx);
 int parseValue(parcerContext* ctx);
 int parseVariable(parcerContext* ctx);
+int parseReturn(parcerContext* ctx);
 int parseStatementEnd(parcerContext* ctx);
 
 
@@ -194,7 +195,7 @@ int parseBlock(parcerContext* ctx)
     return match(ctx, TYPE_DEDENT);
 }
 
-// stmt -> varDef | assign | expr
+// stmt -> varDef | assign | returnStmt | expr
 // One statement of a block
 int parseStatement(parcerContext* ctx)
 {
@@ -222,6 +223,9 @@ int parseStatement(parcerContext* ctx)
                 // Call or bare identifier (return value)
                 CHECK_ERR(parseExpression(ctx));
             }
+            break;
+        case TYPE_RETURN:
+            CHECK_ERR(parseReturn(ctx));
             break;
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
@@ -296,6 +300,21 @@ int parseVariable(parcerContext* ctx)
     //     CHECK_ERR(createNodeAST(varName, varType, varValue));
 
 
+    return ERROR_SUCCESS;
+}
+
+// returnStmt -> 'return' [ expr ]
+int parseReturn(parcerContext* ctx)
+{
+    CHECK_ERR(advance(ctx));  // 'return'
+
+    // Value is optional: parse only if token can begin expression
+    if (canStartExpression(ctx->currentToken.type))
+    {
+        CHECK_ERR(parseExpression(ctx));
+    }
+
+    // Save to AST
     return ERROR_SUCCESS;
 }
 
