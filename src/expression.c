@@ -12,6 +12,7 @@
 // Terminal classes of the precedence table
 typedef enum
 {
+    PS_UNARY,    // unary + - (later !)
     PS_MUL_DIV,  // * /
     PS_ADD_SUB,  // + -
     PS_REL,      // < <= > >=
@@ -24,16 +25,18 @@ typedef enum
 } PrecSymbol;
 
 // '<' shift, '>' reduce, '=' pair ( ), 'x' error
+// Unary binds tighter than * / and is right-assoc
 static const char precTable[PS_COUNT][PS_COUNT] = {
-    //  */   +-   rel  eq   (    )    i    $
-    {'>', '>', '>', '>', '<', '>', '<', '>'},  // */
-    {'<', '>', '>', '>', '<', '>', '<', '>'},  // +-
-    {'<', '<', 'x', '>', '<', '>', '<', '>'},  // rel
-    {'<', '<', '<', 'x', '<', '>', '<', '>'},  // eq
-    {'<', '<', '<', '<', '<', '=', '<', 'x'},  // (
-    {'>', '>', '>', '>', 'x', '>', 'x', '>'},  // )
-    {'>', '>', '>', '>', 'x', '>', 'x', '>'},  // i
-    {'<', '<', '<', '<', '<', 'x', '<', 'x'},  // $
+    //  u    */   +-   rel  eq   (    )    i    $
+    {'<', '>', '>', '>', '>', '<', '>', '<', '>'},  // u
+    {'<', '>', '>', '>', '>', '<', '>', '<', '>'},  // */
+    {'<', '<', '>', '>', '>', '<', '>', '<', '>'},  // +-
+    {'<', '<', '<', 'x', '>', '<', '>', '<', '>'},  // rel
+    {'<', '<', '<', '<', 'x', '<', '>', '<', '>'},  // eq
+    {'<', '<', '<', '<', '<', '<', '=', '<', 'x'},  // (
+    {'x', '>', '>', '>', '>', 'x', '>', 'x', '>'},  // )
+    {'x', '>', '>', '>', '>', 'x', '>', 'x', '>'},  // i
+    {'<', '<', '<', '<', '<', '<', 'x', '<', 'x'},  // $
 };
 
 // Stack item kinds
@@ -111,7 +114,7 @@ static bool precIsBinaryOp(PrecSymbol sym)
 }
 
 // Check handle against rules
-// E -> i | E op E | ( E )
+// E -> i | u E | E op E | ( E )
 static bool precMatchRule(const StackItem* rhs, size_t len)
 {
     // Rule E -> i: the handle consists of one operand terminal
@@ -119,6 +122,13 @@ static bool precMatchRule(const StackItem* rhs, size_t len)
     if (len == 1)
     {
         return rhs[0].kind == ITEM_TERM && rhs[0].sym == PS_OPERAND;
+    }
+
+    // Rule E -> u E: unary operator before expression
+    if (len == 2)
+    {
+        return rhs[0].kind == ITEM_TERM && rhs[0].sym == PS_UNARY &&
+               rhs[1].kind == ITEM_EXPR;
     }
 
     // The remaining rules have exactly three elements on the right-hand side.
@@ -155,7 +165,9 @@ static int precReduce(PrecStack* stack, int line)
 }
 
 // Class of current token; caller must peek when token is '('
-static PrecSymbol precClassify(parcerContext* ctx, int depth)
+// expectOperand: true -> '+'/'-' is unary
+static PrecSymbol precClassify(parcerContext* ctx, int depth,
+                               bool expectOperand)
 {
     switch (ctx->currentToken.type)
     {
@@ -164,7 +176,7 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth)
             return PS_MUL_DIV;
         case TYPE_ADD:
         case TYPE_SUB:
-            return PS_ADD_SUB;
+            return expectOperand ? PS_UNARY : PS_ADD_SUB;
         case TYPE_LESSER:
         case TYPE_LESSER_EQUAL:
         case TYPE_BIGGER:
@@ -223,6 +235,8 @@ static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol in)
 static int precParse(parcerContext* ctx, PrecStack* stack)
 {
     int depth = 0;  // open '(' in this expression
+    // Operand expected at start
+    bool expectOperand = true;
     CHECK_ERR(precStackPush(stack, ITEM_TERM, PS_END));  // bottom $
 
     while (1)
@@ -230,7 +244,7 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
         // '(' needs lookahead for '()'
         if (ctx->currentToken.type == TYPE_LEFT_PAREN) CHECK_ERR(peek(ctx));
 
-        PrecSymbol in = precClassify(ctx, depth);
+        PrecSymbol in = precClassify(ctx, depth, expectOperand);
         PrecSymbol top = stack->items[precStackTopTerm(stack)].sym;
 
         // Input ended and only $ E left
@@ -266,6 +280,8 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
         // Track parens after shift
         if (in == PS_LPAREN) depth++;
         if (in == PS_RPAREN) depth--;
+        // After operand or ')' an operator follows
+        expectOperand = !(in == PS_OPERAND || in == PS_RPAREN);
     }
 }
 
