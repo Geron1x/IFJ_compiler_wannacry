@@ -72,7 +72,7 @@ static int precStackPush(PrecStack* stack, ItemKind kind, PrecSymbol sym)
         if (grown == NULL)
         {
             fprintf(stderr, "Internal err: out of memory\n");
-            return 99;
+            return ERROR_INTERNAL;
         }
         stack->items = grown;
         stack->capacity = newCap;
@@ -80,7 +80,7 @@ static int precStackPush(PrecStack* stack, ItemKind kind, PrecSymbol sym)
     stack->items[stack->count].kind = kind;
     stack->items[stack->count].sym = sym;
     stack->count++;
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // Index of topmost terminal; $ at bottom always exists
@@ -103,7 +103,7 @@ static int precStackInsertHandle(PrecStack* stack)
     memmove(&stack->items[pos + 1], &stack->items[pos],
             (stack->count - 1 - pos) * sizeof(StackItem));
     stack->items[pos].kind = ITEM_HANDLE;
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // Binary operator class
@@ -156,7 +156,7 @@ static int precReduce(PrecStack* stack, int line)
     if (h == 0 || !precMatchRule(&stack->items[h], stack->count - h))
     {
         fprintf(stderr, "Syntax err in line %d: invalid expression\n", line);
-        return 2;
+        return ERROR_SYNTAX;
     }
 
     // Later: create AST node here
@@ -218,7 +218,7 @@ static int precConsumeOperand(parcerContext* ctx)
         {
             return parseCallArgs(ctx);
         }
-        return 0;
+        return ERROR_SUCCESS;
     }
     return advance(ctx);  // literal
 }
@@ -252,11 +252,11 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
         {
             if (stack->count == 2 && stack->items[1].kind == ITEM_EXPR)
             {
-                return 0;
+                return ERROR_SUCCESS;
             }
             fprintf(stderr, "Syntax err in line %d: expected expression\n",
                     ctx->currentToken.line);
-            return 2;
+            return ERROR_SYNTAX;
         }
 
         switch (precTable[top][in])
@@ -274,7 +274,7 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
             default:
                 fprintf(stderr, "Syntax err in line %d: invalid expression\n",
                         ctx->currentToken.line);
-                return 2;
+                return ERROR_SYNTAX;
         }
 
         // Track parens after shift
