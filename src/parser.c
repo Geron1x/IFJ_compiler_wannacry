@@ -392,11 +392,12 @@ int advance(parcerContext* ctx)
     }
 
     int err = getToken(&(ctx->currentToken), ctx->globalScanner);
-    if (err != 0)
+    if (err != ERROR_SUCCESS)
     {
-        // error in lexer
-        fprintf(stderr, "Lexical err (line %d)\n", ctx->currentToken.line);
-        return ERROR_LEXICAL;
+        // Pass scanner code through (1 lexical, 99 memory)
+        if (err == ERROR_LEXICAL)
+            fprintf(stderr, "Lexical err (line %d)\n", ctx->currentToken.line);
+        return err;
     }
     return ERROR_SUCCESS;
 }
@@ -408,11 +409,13 @@ int peek(parcerContext* ctx)
     if (ctx->hasPeek) return ERROR_SUCCESS;
 
     ctx->peekToken.type = TYPE_ERROR;
-    if (getToken(&ctx->peekToken, ctx->globalScanner) != 0)
+    int err = getToken(&ctx->peekToken, ctx->globalScanner);
+    if (err != ERROR_SUCCESS)
     {
-        // Lexical error in lookahead
-        fprintf(stderr, "Lexical err (line %d)\n", ctx->peekToken.line);
-        return ERROR_LEXICAL;
+        // Pass scanner code through (1 lexical, 99 memory)
+        if (err == ERROR_LEXICAL)
+            fprintf(stderr, "Lexical err (line %d)\n", ctx->peekToken.line);
+        return err;
     }
     ctx->hasPeek = true;
     return ERROR_SUCCESS;
