@@ -234,12 +234,17 @@ int parseStatement(parcerContext* ctx)
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
         case TYPE_STRING_LITERAL:
+        // Boolean literals
+        case TYPE_TRUE:
+        case TYPE_FALSE:
         case TYPE_LEFT_PAREN:
             // Expression statement
             CHECK_ERR(parseExpression(ctx));
             break;
         case TYPE_ADD:
         case TYPE_SUB:
+        // Logical not is an operator too
+        case TYPE_EXCLAMATION:
             // Spec: logical line cannot start with operator
             fprintf(stderr,
                     "Syntax err in line %d: line cannot start with operator\n",
@@ -384,7 +389,9 @@ int matchDataType(parcerContext* ctx)
     if (ctx->currentToken.type == TYPE_INT ||
         ctx->currentToken.type == TYPE_DOUBLE ||
         ctx->currentToken.type == TYPE_STRING ||
-        ctx->currentToken.type == TYPE_UNIT)
+        ctx->currentToken.type == TYPE_UNIT ||
+        // Boolean type
+        ctx->currentToken.type == TYPE_BOOLEAN)
     {
         return advance(ctx);
     }

@@ -12,11 +12,13 @@
 // Terminal classes of the precedence table
 typedef enum
 {
-    PS_UNARY,    // unary + - (later !)
+    PS_UNARY,    // unary + - !
     PS_MUL_DIV,  // * /
     PS_ADD_SUB,  // + -
     PS_REL,      // < <= > >=
     PS_EQ,       // == !=
+    PS_AND,      // &&
+    PS_OR,       // ||
     PS_LPAREN,   // (
     PS_RPAREN,   // )
     PS_OPERAND,  // i: literal, id, call, ()
@@ -26,17 +28,20 @@ typedef enum
 
 // '<' shift, '>' reduce, '=' pair ( ), 'x' error
 // Unary binds tighter than * / and is right-assoc
+// && binds tighter than ||, both left-assoc
 static const char precTable[PS_COUNT][PS_COUNT] = {
-    //  u    */   +-   rel  eq   (    )    i    $
-    {'<', '>', '>', '>', '>', '<', '>', '<', '>'},  // u
-    {'<', '>', '>', '>', '>', '<', '>', '<', '>'},  // */
-    {'<', '<', '>', '>', '>', '<', '>', '<', '>'},  // +-
-    {'<', '<', '<', 'x', '>', '<', '>', '<', '>'},  // rel
-    {'<', '<', '<', '<', 'x', '<', '>', '<', '>'},  // eq
-    {'<', '<', '<', '<', '<', '<', '=', '<', 'x'},  // (
-    {'x', '>', '>', '>', '>', 'x', '>', 'x', '>'},  // )
-    {'x', '>', '>', '>', '>', 'x', '>', 'x', '>'},  // i
-    {'<', '<', '<', '<', '<', '<', 'x', '<', 'x'},  // $
+    //  u    */   +-   rel  eq   &&   ||   (    )    i    $
+    {'<', '>', '>', '>', '>', '>', '>', '<', '>', '<', '>'},  // u
+    {'<', '>', '>', '>', '>', '>', '>', '<', '>', '<', '>'},  // */
+    {'<', '<', '>', '>', '>', '>', '>', '<', '>', '<', '>'},  // +-
+    {'<', '<', '<', 'x', '>', '>', '>', '<', '>', '<', '>'},  // rel
+    {'<', '<', '<', '<', 'x', '>', '>', '<', '>', '<', '>'},  // eq
+    {'<', '<', '<', '<', '<', '>', '>', '<', '>', '<', '>'},  // &&
+    {'<', '<', '<', '<', '<', '<', '>', '<', '>', '<', '>'},  // ||
+    {'<', '<', '<', '<', '<', '<', '<', '<', '=', '<', 'x'},  // (
+    {'x', '>', '>', '>', '>', '>', '>', 'x', '>', 'x', '>'},  // )
+    {'x', '>', '>', '>', '>', '>', '>', 'x', '>', 'x', '>'},  // i
+    {'<', '<', '<', '<', '<', '<', '<', '<', 'x', '<', 'x'},  // $
 };
 
 // Stack item kinds
@@ -110,7 +115,7 @@ static int precStackInsertHandle(PrecStack* stack)
 static bool precIsBinaryOp(PrecSymbol sym)
 {
     return sym == PS_MUL_DIV || sym == PS_ADD_SUB || sym == PS_REL ||
-           sym == PS_EQ;
+           sym == PS_EQ || sym == PS_AND || sym == PS_OR;
 }
 
 // Check handle against rules
@@ -135,7 +140,7 @@ static bool precMatchRule(const StackItem* rhs, size_t len)
     if (len != 3) return false;
 
     // Rule E -> E op E, where op is a binary operator:
-    // *, /, +, -, <, <=, >, >=, == or !=.
+    // *, /, +, -, <, <=, >, >=, ==, !=, && or ||.
     bool binary = rhs[0].kind == ITEM_EXPR && rhs[1].kind == ITEM_TERM &&
                   precIsBinaryOp(rhs[1].sym) && rhs[2].kind == ITEM_EXPR;
 
@@ -177,6 +182,14 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         case TYPE_ADD:
         case TYPE_SUB:
             return expectOperand ? PS_UNARY : PS_ADD_SUB;
+        // Logical not is always a unary prefix
+        case TYPE_EXCLAMATION:
+            return PS_UNARY;
+        // Logical and / or
+        case TYPE_AND:
+            return PS_AND;
+        case TYPE_OR:
+            return PS_OR;
         case TYPE_LESSER:
         case TYPE_LESSER_EQUAL:
         case TYPE_BIGGER:
@@ -196,6 +209,9 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
         case TYPE_STRING_LITERAL:
+        // Boolean literals
+        case TYPE_TRUE:
+        case TYPE_FALSE:
             return PS_OPERAND;
         default:
             return PS_END;
@@ -306,6 +322,9 @@ bool canStartExpression(Type type)
         case TYPE_LEFT_PAREN:
         case TYPE_ADD:
         case TYPE_SUB:
+        case TYPE_EXCLAMATION:
+        case TYPE_TRUE:
+        case TYPE_FALSE:
             return true;
         default:
             return false;
