@@ -126,8 +126,12 @@ int parsePrologue(parcerContext* ctx)
 
     CHECK_ERR(match(ctx, TYPE_DOT));
     CHECK_ERR(match(ctx, TYPE_MUL));
-    CHECK_ERR(match(ctx, TYPE_EOL));
-    return ERROR_SUCCESS;
+    // File may end right after prologue (no @main = semantic error later)
+    if (ctx->currentToken.type == TYPE_EOF)
+    {
+        return ERROR_SUCCESS;
+    }
+    return match(ctx, TYPE_EOL);
 }
 
 int parseFunction(parcerContext* ctx)
