@@ -6,6 +6,7 @@
 
 #include <stdbool.h>
 
+#include "error.h"
 #include "scanner.h"
 
 // Parser state shared by parser.c and expression.c
@@ -18,12 +19,12 @@ typedef struct
 } parcerContext;
 
 // Macro for automatic error propagation
-#define CHECK_ERR(call)             \
-    do                              \
-    {                               \
-        int _err = (call);          \
-        if (_err != 0) return _err; \
-                                    \
+#define CHECK_ERR(call)                         \
+    do                                          \
+    {                                           \
+        int _err = (call);                      \
+        if (_err != ERROR_SUCCESS) return _err; \
+                                                \
     } while (0)
 
 // Token helpers (parser.c)

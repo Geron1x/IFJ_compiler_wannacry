@@ -50,7 +50,7 @@ int parse(void)
     // Free buffered lookahead token too
     if (ctx.hasPeek) freeTokenValue(&ctx.peekToken);
 
-    if (err == 0)
+    if (err == ERROR_SUCCESS)
     {
         // just to test if program runned correctly
         fprintf(stderr, "Syntax analysis finished succesfully (code 0).\n");
@@ -100,10 +100,10 @@ int parseProgram(parcerContext* ctx)
         else
         {
             fprintf(stderr, "Syntax err: function def expected (def)\n");
-            return 2;
+            return ERROR_SYNTAX;
         }
     }
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // 1. parse prologue
@@ -120,13 +120,13 @@ int parsePrologue(parcerContext* ctx)
     else
     {
         fprintf(stderr, "Syntax err: the idintifier needed 'ifj26'\n");
-        return 2;
+        return ERROR_SYNTAX;
     }
 
     CHECK_ERR(match(ctx, TYPE_DOT));
     CHECK_ERR(match(ctx, TYPE_MUL));
     CHECK_ERR(match(ctx, TYPE_EOL));
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 int parseFunction(parcerContext* ctx)
@@ -226,9 +226,9 @@ int parseStatement(parcerContext* ctx)
         default:
             fprintf(stderr,
                     "Syntax err: unexpected statement in function body\n");
-            return 2;
+            return ERROR_SYNTAX;
     }
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 int parseValue(parcerContext* ctx)
@@ -255,7 +255,7 @@ int parseValue(parcerContext* ctx)
     // Save to AST
     // CHECK_ERR(createNodeAST(valName, valType, valValue));
 
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 int parseVariable(parcerContext* ctx)
@@ -282,7 +282,7 @@ int parseVariable(parcerContext* ctx)
     //     CHECK_ERR(createNodeAST(varName, varType, varValue));
 
 
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // Statement separator: EOL | ';' [EOL] | before DEDENT/EOF
@@ -296,7 +296,7 @@ int parseStatementEnd(parcerContext* ctx)
         {
             return advance(ctx);
         }
-        return 0;
+        return ERROR_SUCCESS;
     }
 
     // Newline ends the statement
@@ -309,14 +309,14 @@ int parseStatementEnd(parcerContext* ctx)
     if (ctx->currentToken.type == TYPE_DEDENT ||
         ctx->currentToken.type == TYPE_EOF)
     {
-        return 0;
+        return ERROR_SUCCESS;
     }
 
     fprintf(stderr,
             "Syntax err in line %d: expected end of statement (newline or "
             "';')\n",
             ctx->currentToken.line);
-    return 2;
+    return ERROR_SYNTAX;
 }
 
 // callArgs -> '(' [ expr { ',' expr } [ ',' ] ] ')'
@@ -355,7 +355,7 @@ int matchDataType(parcerContext* ctx)
     {
         fprintf(stderr, "Syntax error in line %d: expected data type\n",
                 ctx->currentToken.line);
-        return 2;
+        return ERROR_SYNTAX;
     }
 }
 
@@ -370,7 +370,7 @@ int match(parcerContext* ctx, Type expectedType)
     {
         fprintf(stderr, "Syntax err in line  %d: unpredicted token\n",
                 ctx->currentToken.line);
-        return 2;
+        return ERROR_SYNTAX;
     }
 }
 
@@ -388,7 +388,7 @@ int advance(parcerContext* ctx)
         // Heap string ownership moves to currentToken
         ctx->currentToken = ctx->peekToken;
         ctx->hasPeek = false;
-        return 0;
+        return ERROR_SUCCESS;
     }
 
     int err = getToken(&(ctx->currentToken), ctx->globalScanner);
@@ -396,26 +396,26 @@ int advance(parcerContext* ctx)
     {
         // error in lexer
         fprintf(stderr, "Lexical err (line %d)\n", ctx->currentToken.line);
-        return 1;
+        return ERROR_LEXICAL;
     }
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // Fill lookahead buffer, read it via ctx->peekToken
 int peek(parcerContext* ctx)
 {
     // Already buffered, nothing to read
-    if (ctx->hasPeek) return 0;
+    if (ctx->hasPeek) return ERROR_SUCCESS;
 
     ctx->peekToken.type = TYPE_ERROR;
     if (getToken(&ctx->peekToken, ctx->globalScanner) != 0)
     {
         // Lexical error in lookahead
         fprintf(stderr, "Lexical err (line %d)\n", ctx->peekToken.line);
-        return 1;
+        return ERROR_LEXICAL;
     }
     ctx->hasPeek = true;
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // Free heap string owned by the token
