@@ -707,6 +707,52 @@ static Errors checkReturn(astNode* returnNode, symtable* globalTable,
     {
         return ERROR_INTERNAL;
     }
+    dataType expectedType =
+        symtableGetFuncReturn(globalTable, currentNode->data.funcData.key);
+    dataType type = S_TYPE_UNIT;
+
+    if (returnNode->childCount > 0 && returnNode->children != NULL &&
+        returnNode->children[0] != NULL)
+    {
+        Errors err = 0;
+        type = checkExpr(returnNode->children[0], globalTable, &err);
+        if (err != 0)
+        {
+            return err;
+        }
+        if (type == S_TYPE_UNKNOWN)
+        {
+            return ERROR_TYPE_MISMATCH;
+        }
+
+        if (expectedType == S_TYPE_UNIT)
+        {
+            returnNode->children[0]->retType = type;
+            returnNode->retType = S_TYPE_UNIT;
+            return 0;
+        }
+
+        if (type == S_TYPE_INT && expectedType == S_TYPE_DOUBLE)
+        {
+            type = S_TYPE_DOUBLE;
+            returnNode->children[0]->int2float = true;
+        }
+    }
+    else
+    {
+
+        if (expectedType != S_TYPE_UNIT)
+        {
+            return ERROR_TYPE_MISMATCH;
+        }
+    }
+
+    if (type != expectedType)
+    {
+        return ERROR_TYPE_MISMATCH;
+    }
+
+    returnNode->retType = expectedType;
 
     return 0;
 }
