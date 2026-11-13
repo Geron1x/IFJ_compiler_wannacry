@@ -481,9 +481,48 @@ static Errors checkStatement(astNode* statNode, symtable* globalTable,
 
 static Errors checkVarDef(astNode* varNode, symtable* globalTable)
 {
-    if (varNode == NULL || varNode->childCount == 0 || globalTable == NULL)
+    if (varNode == NULL || varNode->childCount == 0)
     {
         return ERROR_INTERNAL;
+    }
+    Errors err = 0;
+    dataType type = checkExpr(varNode->children[0], globalTable, &err);
+    if (type == S_TYPE_UNKNOWN)
+    {
+        if (err != 0)
+        {
+            return err;
+        }
+        return ERROR_TYPE_MISMATCH;
+    }
+
+    if (varNode->retType != S_TYPE_UNKNOWN)
+    {
+        if (varNode->retType == type)
+        {
+        }
+        else if (varNode->retType == S_TYPE_DOUBLE && type == S_TYPE_INT)
+        {
+            type = S_TYPE_DOUBLE;
+            if (varNode->childCount > 0 && varNode->children[0] != NULL)
+            {
+                varNode->children[0]->int2float = true;
+            }
+        }
+        else
+        {
+            return ERROR_TYPE_MISMATCH;
+        }
+    }
+    else
+    {
+        varNode->retType = type;
+    }
+    Errors status = stackInsertVar(globalTable, varNode->data.varData.key, type,
+                                   varNode->data.varData.isConst);
+    if (status != 0)
+    {
+        return status;
     }
     return 0;
 }
@@ -537,13 +576,41 @@ static dataType checkExpr(astNode* exprNode, symtable* globalTable, Errors* err)
 static Errors checkSet(astNode* setNode, symtable* globalTable)
 {
     if (setNode == NULL || setNode->childCount < 1 ||
-        setNode->children[0] == NULL || setNode->data.varData.key == NULL ||
-        globalTable == NULL)
+        setNode->children[0] == NULL || setNode->data.varData.key == NULL)
     {
         return ERROR_INTERNAL;
     }
 
-
+    dataType type = symtableGetVarType(globalTable, setNode->data.varData.key);
+    if (type == S_TYPE_UNKNOWN)
+    {
+        return ERROR_UNDEFINED_NAME;
+    }
+    if (symtableGetIsVarConst(globalTable, setNode->data.varData.key) == true)
+    {
+        return ERROR_IMMUTABLE_WRITE;
+    }
+    Errors err = 0;
+    dataType expType = checkExpr(setNode->children[0], globalTable, &err);
+    if (expType == S_TYPE_UNKNOWN)
+    {
+        if (err != 0)
+        {
+            return err;
+        }
+        return ERROR_TYPE_MISMATCH;
+    }
+    if (type != expType)
+    {
+        if (type == S_TYPE_DOUBLE && expType == S_TYPE_INT)
+        {
+            setNode->children[0]->int2float = true;
+        }
+        else
+        {
+            return ERROR_TYPE_MISMATCH;
+        }
+    }
     return 0;
 }
 
