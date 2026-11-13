@@ -1,6 +1,13 @@
-// Project: Implementace překladače imperativního jazyka IFJ26
-// Author:
-// Heorhiy Haziy (xhaziyh00)
+/**
+ * @file parser_internal.h
+ * @brief Parser state and token helpers shared by parser.c and expression.c
+ *
+ * Project: Implementace překladače imperativního jazyka IFJ26
+ *
+ * @author Heorhiy Haziy (xhaziyh00)
+ *
+ */
+
 #ifndef PARSER_INTERNAL_H
 #define PARSER_INTERNAL_H
 
@@ -9,17 +16,23 @@
 #include "error.h"
 #include "scanner.h"
 
-// Parser state shared by parser.c and expression.c
+/**
+ * @struct parcerContext
+ * @brief Parser state shared by parser.c and expression.c.
+ */
 typedef struct
 {
-    Token currentToken;
-    Scanner* globalScanner;
-    Token peekToken;  // next token read ahead
-    bool hasPeek;     // true if peekToken is filled
-    Type prevType;    // type of the last read token
+    Token currentToken;      ///< token being processed now
+    Scanner* globalScanner;  ///< scanner that gives the tokens
+    Token peekToken;         ///< next token read ahead
+    bool hasPeek;            ///< true if peekToken is filled
+    Type prevType;           ///< type of the last read token
 } parcerContext;
 
-// Return the error right away if the call failed
+/**
+ * @def CHECK_ERR
+ * @brief Returns the error code right away if the call failed.
+ */
 #define CHECK_ERR(call)                         \
     do                                          \
     {                                           \
@@ -28,12 +41,39 @@ typedef struct
                                                 \
     } while (0)
 
-// Work with tokens, written in parser.c
+/**
+ * @brief Moves to the next token, the old one is freed.
+ *
+ * @param ctx Parser state.
+ * @return ERROR_SUCCESS or the error code from the scanner.
+ */
 int advance(parcerContext* ctx);
+
+/**
+ * @brief Reads the next token ahead without moving to it.
+ *
+ * After success the token is in ctx->peekToken.
+ *
+ * @param ctx Parser state.
+ * @return ERROR_SUCCESS or the error code from the scanner.
+ */
 int peek(parcerContext* ctx);
+
+/**
+ * @brief Checks that the current token has the expected type and moves on.
+ *
+ * @param ctx Parser state.
+ * @param expectedType Type the current token must have.
+ * @return ERROR_SUCCESS, ERROR_SYNTAX or the error code from the scanner.
+ */
 int match(parcerContext* ctx, Type expectedType);
 
-// Call arguments, written in parser.c
+/**
+ * @brief Parses call arguments: values in parentheses separated by commas.
+ *
+ * @param ctx Parser state, current token is the opening parenthesis.
+ * @return ERROR_SUCCESS, ERROR_LEXICAL, ERROR_SYNTAX or ERROR_INTERNAL.
+ */
 int parseCallArgs(parcerContext* ctx);
 
 #endif
