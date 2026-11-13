@@ -17,13 +17,13 @@
 
 typedef enum
 {
-    TYPE_UNIT,
-    TYPE_INT,
-    TYPE_DOUBLE,
-    TYPE_STRING,
-    TYPE_BOOL,
-    TYPE_ANY,
-    TYPE_UNKNOWN
+    S_TYPE_UNIT,
+    S_TYPE_INT,
+    S_TYPE_DOUBLE,
+    S_TYPE_STRING,
+    S_TYPE_BOOL,
+    S_TYPE_ANY,
+    S_TYPE_UNKNOWN
 } dataType;
 
 typedef enum
@@ -32,8 +32,63 @@ typedef enum
     TYPE_VARIABLE
 } idType;
 
+typedef struct astNode astNode;
 typedef struct symtable symtable;
 typedef struct nodeData nodeData;
+
+
+/**
+ * @brief Creates a symbol table context for a function
+ */
+symtable* symtableCreateFuncContext(symtable* globalTable);
+/**
+ * @brief Returns the number of function parameters
+ */
+int symtableGetFuncParamCount(symtable* table, const char* key);
+/**
+ * @brief Returns the type of a function parameter
+ */
+dataType symtableGetFuncParamType(symtable* table, const char* key, int index);
+/**
+ * @brief Returns whether a function is being analyzed
+ */
+bool symtableGetFuncIsAnalyzing(symtable* table, const char* key);
+/**
+ * @brief Sets whether a function is being analyzed
+ */
+void symtableSetFuncIsAnalyzing(symtable* table, const char* key, bool status);
+/**
+ * @brief Returns whether a function has been checked
+ */
+bool symtableGetFuncIsChecked(symtable* table, const char* key);
+/**
+ * @brief Sets whether a function has been checked
+ */
+void symtableSetFuncIsChecked(symtable* table, const char* key, bool status);
+/**
+ * @brief Returns the AST node of a function
+ */
+struct astNode* symtableGetFuncNode(symtable* table, const char* key);
+/**
+ * @brief Sets the return type of a function
+ */
+void symtableSetFuncReturn(symtable* table, const char* key,
+                           dataType returnType);
+/**
+ * @brief returns dataType of a variable,
+ * Searched through all scopes,
+ * Returns S_TYPE_UNKNOWN if no variable was found
+ */
+dataType symtableGetVarType(symtable* symtable, const char* key);
+/**
+ * @brief returns whether passed variable is val or var
+ */
+bool symtableGetIsVarConst(symtable* symtable, const char* key);
+/**
+ * @brief returns data type that function under passed key returns
+ */
+dataType symtableGetFuncReturn(symtable* symtable, const char* key);
+
 
 /**
  * @brief Opens new scope for local variables
@@ -50,12 +105,7 @@ void stackPop(symtable* symtable);
  * redifinition feedback error code
  */
 Errors stackInsertVar(symtable* symtable, const char* key, dataType type,
-                      bool isConst, bool isInit);
-
-/**
- * @brief Searches for a variable in the all present scopes
- */
-nodeData* stackFindVar(const char* key, symtable* symtable);
+                      bool isConst);
 
 /**
  * @brief Destructor to clear all scopes present in symtable
@@ -78,7 +128,7 @@ Errors symtableBaseFuncInit(symtable* funcTable);
  */
 Errors symtableInsertFunc(symtable* symtable, const char* key,
                           dataType returnType, int paramCount,
-                          const dataType* paramType);
+                          const dataType* paramType, astNode* funcNode);
 
 /**
  * @brief Initialize symtable
