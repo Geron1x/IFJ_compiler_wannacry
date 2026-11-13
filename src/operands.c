@@ -27,3 +27,16 @@ Errors tryPrint(const char* code)
 
     return ERROR_SUCCESS;
 }
+
+/** Prints bool@true or bool@false */
+Errors writeLiteralBool(bool boolValue)
+{
+    if (boolValue == true)
+    {
+        return tryPrint("bool@true");
+    }
+    else
+    {
+        return tryPrint("bool@false");
+    }
+}

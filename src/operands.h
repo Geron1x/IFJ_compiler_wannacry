@@ -19,8 +19,16 @@
  * @brief Prints a piece of code to the output
  *
  * @param code The code to print
- * @return ERROR_SUCCESS if everything worked, in the other way ERROR_INTERNAL
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
 Errors tryPrint(const char* code);
+
+/**
+ * @brief Prints bool@true or bool@false to the output
+ *
+ * @param boolValue true or false
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+Errors writeLiteralBool(bool boolValue);
 
 #endif
