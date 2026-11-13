@@ -41,7 +41,6 @@ typedef enum astoptype
     AST_OP_SUB,
     AST_OP_MUL,
     AST_OP_DIV,
-    AST_OP_CMP,
 
     AST_OP_EQ,
     AST_OP_NEQ,
@@ -56,8 +55,8 @@ typedef enum astoptype
 } astOpType;
 
 /**
- * @brief Create a main node Prog which stores every function node as a child
- * (AST_PROG)
+ * @brief Create a main node Prog which stores every function node as a
+ * child (AST_PROG)
  */
 Errors astCreateProgram(astNode** progNode);
 /**

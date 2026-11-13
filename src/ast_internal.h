@@ -1,3 +1,13 @@
+/**
+ * @file ast_internal.h
+ * @brief Header file to define astNode structre
+ *
+ * Project: Implementace překladače imperativního jazyka IFJ26
+ *
+ * @author Arkhyp Samoilenko (xsamoia00)
+ *
+ */
+
 #ifndef AST_INTERNAL_H
 #define AST_INTERNAL_H
 
@@ -13,6 +23,7 @@ struct astNode
     int childCount;    /**< number of occupied slots in children array */
     int childCapacity; /**< max amount of children to store without expanding */
 
+    bool int2float;
     union
     {
         int intVal;       /**< value for literal node int */
