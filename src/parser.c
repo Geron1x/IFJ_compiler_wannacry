@@ -15,6 +15,7 @@
 // Work with tokens
 void freeTokenValue(Token* token);
 int matchDataType(parcerContext* ctx);
+int checkTrailingComma(parcerContext* ctx, int commaLine);
 
 // Program, prologue and functions
 int parseProgram(parcerContext* ctx);
@@ -158,11 +159,13 @@ int parseFunction(parcerContext* ctx)
         // Each comma brings one more parameter
         while (ctx->currentToken.type == TYPE_COMMA)
         {
+            int commaLine = ctx->currentToken.line;
             CHECK_ERR(advance(ctx));
 
-            // Comma before closing parenthesis is allowed
+            // Comma before ) only with new line
             if (ctx->currentToken.type == TYPE_RIGHT_PAREN)
             {
+                CHECK_ERR(checkTrailingComma(ctx, commaLine));
                 break;
             }
             CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
@@ -449,10 +452,29 @@ int parseCallArgs(parcerContext* ctx)
         {
             break;
         }
-        // Skip comma, comma before closing parenthesis is allowed
+        // Skip comma, comma before ) only with new line
+        int commaLine = ctx->currentToken.line;
         CHECK_ERR(advance(ctx));
+        if (ctx->currentToken.type == TYPE_RIGHT_PAREN)
+        {
+            CHECK_ERR(checkTrailingComma(ctx, commaLine));
+        }
     }
     return match(ctx, TYPE_RIGHT_PAREN);
+}
+
+// Comma before ) is allowed only if ) is on a later line
+int checkTrailingComma(parcerContext* ctx, int commaLine)
+{
+    if (ctx->currentToken.line == commaLine)
+    {
+        fprintf(stderr,
+                "Syntax error in line %d: trailing comma needs a new line "
+                "before ')'\n",
+                commaLine);
+        return ERROR_SYNTAX;
+    }
+    return ERROR_SUCCESS;
 }
 
 // ============================================================
