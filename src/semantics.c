@@ -25,6 +25,20 @@ static Errors checkBlock(astNode* blockNode, symtable* globalTable,
                          astNode* currentFunc);
 static Errors checkFunctionBody(astNode* funcNode, symtable* globalTable);
 
+static Errors checkStatement(astNode* statNode, symtable* globalTable,
+                             astNode* currentNode);
+
+static dataType checkExpr(astNode* exprNode, symtable* globalTable,
+                          Errors* err);
+static Errors checkVarDef(astNode* varNode, symtable* globalTable);
+static Errors checkSet(astNode* setNode, symtable* globalTable);
+static Errors checkIf(astNode* ifNode, symtable* globalTable,
+                      astNode* currentNode);
+static Errors checkWhile(astNode* whileNode, symtable* globalTable,
+                         astNode* currentNode);
+static Errors checkReturn(astNode* returnNode, symtable* globalTable,
+                          astNode* currentNode);
+
 
 Errors semanticsCheck(const astNode* prog)
 {
@@ -388,10 +402,141 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
 static Errors checkBlock(astNode* blockNode, symtable* globalTable,
                          astNode* currentFunc)
 {
-    if (blockNode == NULL || globalTable == NULL || currentFunc == NULL)
+    if (blockNode == NULL || globalTable == NULL)
     {
         return ERROR_INTERNAL;
     }
 
+    int statCount = blockNode->childCount;
+    Errors status = 0;
+    for (int i = 0; i < statCount; i++)
+    {
+        status =
+            checkStatement(blockNode->children[i], globalTable, currentFunc);
+        if (status != 0)
+        {
+            return status;
+        }
+    }
+
+    return 0;
+}
+static Errors checkStatement(astNode* statNode, symtable* globalTable,
+                             astNode* currentNode)
+{
+    Errors status = 0;
+    switch (statNode->nodeType)
+    {
+        case AST_STAT_VAR:
+            status = checkVarDef(statNode, globalTable);
+            break;
+        case AST_STAT_SET:
+            status = checkSet(statNode, globalTable);
+            break;
+        case AST_STAT_IF:
+            status = checkIf(statNode, globalTable, currentNode);
+            break;
+        case AST_STAT_WHILE:
+            status = checkWhile(statNode, globalTable, currentNode);
+            break;
+        case AST_STAT_RETURN:
+            status = checkReturn(statNode, globalTable, currentNode);
+            break;
+        case AST_EXPR_BINARY:
+        case AST_EXPR_UNARY:
+        case AST_EXPR_LITERAL:
+        case AST_EXPR_VAR:
+        case AST_EXPR_CALL:
+        {
+            Errors err = 0;
+            dataType exprType = checkExpr(statNode, globalTable, &err);
+            if (err != 0)
+            {
+                return err;
+            }
+            if (exprType == S_TYPE_UNKNOWN)
+            {
+                return ERROR_TYPE_MISMATCH;
+            }
+
+            statNode->retType = exprType;
+            return 0;
+        }
+        default:
+            return ERROR_INTERNAL;
+    }
+    if (status != 0)
+    {
+        return status;
+    }
+    return 0;
+}
+
+static Errors checkVarDef(astNode* varNode, symtable* globalTable)
+{
+    if (varNode == NULL || varNode->childCount == 0 || globalTable == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+    return 0;
+}
+static dataType checkExpr(astNode* exprNode, symtable* globalTable, Errors* err)
+{
+    if (exprNode == NULL || globalTable == NULL)
+    {
+        *err = ERROR_INTERNAL;
+        return S_TYPE_UNKNOWN;
+    }
+    *err = 0;
+    return S_TYPE_UNKNOWN;
+}
+
+
+static Errors checkSet(astNode* setNode, symtable* globalTable)
+{
+    if (setNode == NULL || setNode->childCount < 1 ||
+        setNode->children[0] == NULL || setNode->data.varData.key == NULL ||
+        globalTable == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    return 0;
+}
+
+
+static Errors checkIf(astNode* ifNode, symtable* globalTable,
+                      astNode* currentNode)
+{
+    if (ifNode == NULL || currentNode == NULL || ifNode->children[0] == NULL ||
+        globalTable == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+    return 0;
+}
+
+
+static Errors checkWhile(astNode* whileNode, symtable* globalTable,
+                         astNode* currentNode)
+{
+    if (whileNode == NULL || globalTable == NULL || currentNode == NULL ||
+        whileNode->childCount < 2 || whileNode->children == NULL ||
+        whileNode->children[0] == NULL || whileNode->children[1] == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+
+    return 0;
+}
+static Errors checkReturn(astNode* returnNode, symtable* globalTable,
+                          astNode* currentNode)
+{
+    if (returnNode == NULL || globalTable == NULL || currentNode == NULL ||
+        currentNode->data.funcData.key == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
     return 0;
 }
