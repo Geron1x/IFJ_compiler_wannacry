@@ -39,6 +39,13 @@ static Errors checkWhile(astNode* whileNode, symtable* globalTable,
 static Errors checkReturn(astNode* returnNode, symtable* globalTable,
                           astNode* currentNode);
 
+static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
+                                Errors* err);
+static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
+                               Errors* err);
+static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
+                              Errors* err);
+
 
 Errors semanticsCheck(const astNode* prog)
 {
@@ -478,17 +485,53 @@ static Errors checkVarDef(astNode* varNode, symtable* globalTable)
     {
         return ERROR_INTERNAL;
     }
+
     return 0;
 }
 static dataType checkExpr(astNode* exprNode, symtable* globalTable, Errors* err)
 {
-    if (exprNode == NULL || globalTable == NULL)
+    if (exprNode == NULL)
     {
         *err = ERROR_INTERNAL;
         return S_TYPE_UNKNOWN;
     }
-    *err = 0;
-    return S_TYPE_UNKNOWN;
+    switch (exprNode->nodeType)
+    {
+        case AST_EXPR_LITERAL:
+            if (exprNode->retType == S_TYPE_UNKNOWN)
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+            return exprNode->retType;
+
+        case AST_EXPR_VAR:
+            if (exprNode->data.varData.key == NULL)
+            {
+                *err = ERROR_INTERNAL;
+                return S_TYPE_UNKNOWN;
+            }
+            exprNode->retType =
+                symtableGetVarType(globalTable, exprNode->data.varData.key);
+            if (exprNode->retType == S_TYPE_UNKNOWN)
+            {
+                *err = ERROR_UNDEFINED_NAME;
+            }
+            return exprNode->retType;
+
+        case AST_EXPR_BINARY:
+            return checkBinaryExpr(exprNode, globalTable, err);
+
+        case AST_EXPR_UNARY:
+            return checkUnaryExpr(exprNode, globalTable, err);
+
+        case AST_EXPR_CALL:
+            return checkCallExpr(exprNode, globalTable, err);
+
+        default:
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+    }
 }
 
 
@@ -513,6 +556,7 @@ static Errors checkIf(astNode* ifNode, symtable* globalTable,
     {
         return ERROR_INTERNAL;
     }
+
     return 0;
 }
 
@@ -527,7 +571,6 @@ static Errors checkWhile(astNode* whileNode, symtable* globalTable,
         return ERROR_INTERNAL;
     }
 
-
     return 0;
 }
 static Errors checkReturn(astNode* returnNode, symtable* globalTable,
@@ -538,5 +581,141 @@ static Errors checkReturn(astNode* returnNode, symtable* globalTable,
     {
         return ERROR_INTERNAL;
     }
+
     return 0;
+}
+
+
+static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
+                                Errors* err)
+{
+    if (biNode == NULL || biNode->childCount < 2 || biNode->children == NULL ||
+        biNode->children[0] == NULL || biNode->children[1] == NULL)
+    {
+        *err = ERROR_INTERNAL;
+        return S_TYPE_UNKNOWN;
+    }
+
+    dataType typeLeft = checkExpr(biNode->children[0], globalTable, err);
+    if (typeLeft == S_TYPE_UNKNOWN)
+    {
+        return S_TYPE_UNKNOWN;
+    }
+    dataType typeRight = checkExpr(biNode->children[1], globalTable, err);
+    if (typeRight == S_TYPE_UNKNOWN)
+    {
+        return S_TYPE_UNKNOWN;
+    }
+
+    if (typeLeft != typeRight)
+    {
+        if (typeLeft == S_TYPE_DOUBLE && typeRight == S_TYPE_INT)
+        {
+            typeRight = S_TYPE_DOUBLE;
+            biNode->children[1]->int2float = true;
+        }
+        else if (typeLeft == S_TYPE_INT && typeRight == S_TYPE_DOUBLE)
+        {
+            typeLeft = S_TYPE_DOUBLE;
+            biNode->children[0]->int2float = true;
+        }
+        else
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+    }
+
+    switch (biNode->data.opType)
+    {
+        case AST_OP_ADD:
+        case AST_OP_SUB:
+        case AST_OP_MUL:
+        case AST_OP_DIV:
+            if (typeLeft == S_TYPE_INT || typeLeft == S_TYPE_DOUBLE ||
+                typeLeft == S_TYPE_STRING)
+            {
+                if (typeLeft == S_TYPE_STRING &&
+                    biNode->data.opType != AST_OP_ADD)
+                {
+                    *err = ERROR_TYPE_MISMATCH;
+                    return S_TYPE_UNKNOWN;
+                }
+            }
+            else
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+            break;
+        case AST_OP_L:
+        case AST_OP_G:
+        case AST_OP_LEQ:
+        case AST_OP_GEQ:
+            if (typeLeft == S_TYPE_INT || typeLeft == S_TYPE_DOUBLE ||
+                typeLeft == S_TYPE_STRING)
+            {
+                typeLeft = S_TYPE_BOOL;
+            }
+            else
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+            break;
+        case AST_OP_EQ:
+        case AST_OP_NEQ:
+            if (typeLeft == S_TYPE_INT || typeLeft == S_TYPE_DOUBLE ||
+                typeLeft == S_TYPE_STRING || typeLeft == S_TYPE_BOOL)
+            {
+                typeLeft = S_TYPE_BOOL;
+            }
+            else
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+            break;
+        default:
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+    }
+    if (typeLeft == S_TYPE_UNKNOWN)
+    {
+        *err = ERROR_TYPE_MISMATCH;
+        return S_TYPE_UNKNOWN;
+    }
+    biNode->retType = typeLeft;
+    return typeLeft;
+}
+
+
+static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
+                              Errors* err)
+{
+    if (callNode == NULL || globalTable == NULL || err == NULL ||
+        callNode->data.funcData.key == NULL)
+    {
+        if (err != NULL)
+        {
+            *err = ERROR_INTERNAL;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    return 0;
+}
+
+
+static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
+                               Errors* err)
+{
+    if (uNode == NULL || uNode->childCount < 1 || uNode->children == NULL ||
+        uNode->children[0] == NULL || globalTable == NULL)
+    {
+        *err = ERROR_INTERNAL;
+        return S_TYPE_UNKNOWN;
+    }
+
+    return S_TYPE_UNKNOWN;
 }
