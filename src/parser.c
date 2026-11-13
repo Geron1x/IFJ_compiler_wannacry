@@ -180,11 +180,29 @@ int parseFunction(parcerContext* ctx)
         CHECK_ERR(matchDataType(ctx));
     }
 
-    // After = the body starts on a new line
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
-    CHECK_ERR(match(ctx, TYPE_EOL));
 
-    return parseBlock(ctx);
+    // New line after = means a block body
+    if (ctx->currentToken.type == TYPE_EOL)
+    {
+        CHECK_ERR(advance(ctx));
+        return parseBlock(ctx);
+    }
+
+    // Otherwise the body is one expression on the same line
+    CHECK_ERR(parseExpression(ctx));
+
+    // Nothing else may follow it on this line
+    if (ctx->currentToken.type != TYPE_EOL &&
+        ctx->currentToken.type != TYPE_EOF)
+    {
+        fprintf(stderr,
+                "Syntax error in line %d: expected end of line after function "
+                "body\n",
+                ctx->currentToken.line);
+        return ERROR_SYNTAX;
+    }
+    return ERROR_SUCCESS;
 }
 
 // ============================================================
