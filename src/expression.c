@@ -9,7 +9,7 @@
 
 #define PREC_STACK_INIT_CAPACITY 16
 
-// Terminal classes of the precedence table
+// Groups of tokens used in the precedence table
 typedef enum
 {
     PS_UNARY,    // unary + - !
@@ -21,14 +21,15 @@ typedef enum
     PS_OR,       // ||
     PS_LPAREN,   // (
     PS_RPAREN,   // )
-    PS_OPERAND,  // i: literal, id, call, ()
-    PS_END,      // $: token that ends expression
+    PS_OPERAND,  // literal, name, call, ()
+    PS_END,      // anything that ends the expression
     PS_COUNT
 } PrecSymbol;
 
-// '<' shift, '>' reduce, '=' pair ( ), 'x' error
-// Unary binds tighter than * / and is right-assoc
-// && binds tighter than ||, both left-assoc
+// Precedence table: row is the top of the stack, column is the next token
+// '<' push the token, '>' fold the top into one expression, '=' pair of
+// parentheses, 'x' error
+// Unary operators are the strongest, && is stronger than ||
 static const char precTable[PS_COUNT][PS_COUNT] = {
     //  u    */   +-   rel  eq   &&   ||   (    )    i    $
     {'<', '>', '>', '>', '>', '>', '>', '<', '>', '<', '>'},  // u
@@ -44,21 +45,22 @@ static const char precTable[PS_COUNT][PS_COUNT] = {
     {'<', '<', '<', '<', '<', '<', '<', '<', 'x', '<', 'x'},  // $
 };
 
-// Stack item kinds
+// What can lie on the stack
 typedef enum
 {
-    ITEM_TERM,   // terminal
-    ITEM_EXPR,   // nonterminal E
-    ITEM_HANDLE  // handle start mark '<'
+    ITEM_TERM,   // token
+    ITEM_EXPR,   // already folded expression
+    ITEM_HANDLE  // mark where folding starts
 } ItemKind;
 
+// One item of the stack
 typedef struct
 {
     ItemKind kind;
-    PrecSymbol sym;  // used for ITEM_TERM
+    PrecSymbol sym;  // token group, used only for ITEM_TERM
 } StackItem;
 
-// Dynamic stack
+// Stack that grows when it is full
 typedef struct
 {
     StackItem* items;
@@ -66,7 +68,7 @@ typedef struct
     size_t capacity;
 } PrecStack;
 
-// Push item, grow by doubling; 0 ok, 99 memory
+// Push an item, double the size if needed, 99 if no memory
 static int precStackPush(PrecStack* stack, ItemKind kind, PrecSymbol sym)
 {
     if (stack->count == stack->capacity)
@@ -88,7 +90,7 @@ static int precStackPush(PrecStack* stack, ItemKind kind, PrecSymbol sym)
     return ERROR_SUCCESS;
 }
 
-// Index of topmost terminal; $ at bottom always exists
+// Find the highest token on the stack, the bottom one always exists
 static size_t precStackTopTerm(const PrecStack* stack)
 {
     size_t i = stack->count;
@@ -100,61 +102,60 @@ static size_t precStackTopTerm(const PrecStack* stack)
     return 0;
 }
 
-// Insert handle mark right above topmost terminal
+// Put the folding mark right above the highest token
 static int precStackInsertHandle(PrecStack* stack)
 {
     size_t pos = precStackTopTerm(stack) + 1;
-    CHECK_ERR(precStackPush(stack, ITEM_HANDLE, PS_END));  // grow by one
+
+    // Make room for one more item, then shift the rest up
+    CHECK_ERR(precStackPush(stack, ITEM_HANDLE, PS_END));
     memmove(&stack->items[pos + 1], &stack->items[pos],
             (stack->count - 1 - pos) * sizeof(StackItem));
     stack->items[pos].kind = ITEM_HANDLE;
     return ERROR_SUCCESS;
 }
 
-// Binary operator class
+// True for operators that stand between two expressions
 static bool precIsBinaryOp(PrecSymbol sym)
 {
     return sym == PS_MUL_DIV || sym == PS_ADD_SUB || sym == PS_REL ||
            sym == PS_EQ || sym == PS_AND || sym == PS_OR;
 }
 
-// Check handle against rules
-// E -> i | u E | E op E | ( E )
+// Check that the items after the mark form a correct expression
 static bool precMatchRule(const StackItem* rhs, size_t len)
 {
-    // Rule E -> i: the handle consists of one operand terminal
-    // (literal, identifier, function call, or the () literal).
+    // One operand: literal, name, call or ()
     if (len == 1)
     {
         return rhs[0].kind == ITEM_TERM && rhs[0].sym == PS_OPERAND;
     }
 
-    // Rule E -> u E: unary operator before expression
+    // Unary operator before an expression
     if (len == 2)
     {
         return rhs[0].kind == ITEM_TERM && rhs[0].sym == PS_UNARY &&
                rhs[1].kind == ITEM_EXPR;
     }
 
-    // The remaining rules have exactly three elements on the right-hand side.
+    // Other cases always have three items
     if (len != 3) return false;
 
-    // Rule E -> E op E, where op is a binary operator:
-    // *, /, +, -, <, <=, >, >=, ==, !=, && or ||.
+    // Two expressions with an operator between them
     bool binary = rhs[0].kind == ITEM_EXPR && rhs[1].kind == ITEM_TERM &&
                   precIsBinaryOp(rhs[1].sym) && rhs[2].kind == ITEM_EXPR;
 
-    // Rule E -> ( E ): the expression is enclosed in parentheses.
+    // Expression in parentheses
     bool parens = rhs[0].kind == ITEM_TERM && rhs[0].sym == PS_LPAREN &&
                   rhs[1].kind == ITEM_EXPR && rhs[2].kind == ITEM_TERM &&
                   rhs[2].sym == PS_RPAREN;
     return binary || parens;
 }
 
-// Replace handle by E
+// Fold everything after the last mark into one expression
 static int precReduce(PrecStack* stack, int line)
 {
-    // Find last handle mark
+    // Find the last mark
     size_t h = stack->count;
     while (h > 0 && stack->items[h - 1].kind != ITEM_HANDLE) h--;
 
@@ -164,13 +165,15 @@ static int precReduce(PrecStack* stack, int line)
         return ERROR_SYNTAX;
     }
 
-    // Later: create AST node here
-    stack->count = h - 1;  // drop handle and its content
+    // Here an AST node will be created later
+
+    // Remove the mark with its items and push one expression
+    stack->count = h - 1;
     return precStackPush(stack, ITEM_EXPR, PS_END);
 }
 
-// Class of current token; caller must peek when token is '('
-// expectOperand: true -> '+'/'-' is unary
+// Find the group of the current token, for ( the caller must peek first
+// expectOperand tells if + and - are unary here
 static PrecSymbol precClassify(parcerContext* ctx, int depth,
                                bool expectOperand)
 {
@@ -179,67 +182,76 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         case TYPE_MUL:
         case TYPE_DIV:
             return PS_MUL_DIV;
+        // Plus and minus are unary where an operand is expected
         case TYPE_ADD:
         case TYPE_SUB:
             return expectOperand ? PS_UNARY : PS_ADD_SUB;
-        // Logical not is always a unary prefix
+        // Logical not is always unary
         case TYPE_EXCLAMATION:
             return PS_UNARY;
-        // Logical and / or
+        // Logical and, logical or
         case TYPE_AND:
             return PS_AND;
         case TYPE_OR:
             return PS_OR;
+        // Comparison
         case TYPE_LESSER:
         case TYPE_LESSER_EQUAL:
         case TYPE_BIGGER:
         case TYPE_BIGGER_EQUAL:
             return PS_REL;
+        // Equal and not equal
         case TYPE_EQUAL:
         case TYPE_NOT_EQUAL:
             return PS_EQ;
+        // Empty parentheses are the Unit value
+        // Unit
         case TYPE_LEFT_PAREN:
-            // '()' is Unit literal
             return (ctx->peekToken.type == TYPE_RIGHT_PAREN) ? PS_OPERAND
                                                              : PS_LPAREN;
+        // Extra closing parenthesis belongs to the caller
         case TYPE_RIGHT_PAREN:
-            // Unmatched ')' belongs to caller
             return (depth > 0) ? PS_RPAREN : PS_END;
+        // Names and literals, including true and false
         case TYPE_IDENTIFIER:
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
         case TYPE_STRING_LITERAL:
-        // Boolean literals
         case TYPE_TRUE:
         case TYPE_FALSE:
             return PS_OPERAND;
+        // Any other token ends the expression
         default:
             return PS_END;
     }
 }
 
-// Consume operand: literal, id, call or '()'
+// Read one operand: literal, name, call or ()
 static int precConsumeOperand(parcerContext* ctx)
 {
+    // Empty parentheses are two tokens
     if (ctx->currentToken.type == TYPE_LEFT_PAREN)
     {
-        CHECK_ERR(advance(ctx));  // '('
-        return advance(ctx);      // ')'
+        CHECK_ERR(advance(ctx));
+        return advance(ctx);
     }
+
+    // Name followed by ( is a call, arguments are read recursively
     if (ctx->currentToken.type == TYPE_IDENTIFIER)
     {
         CHECK_ERR(advance(ctx));
-        // Call: args are parsed recursively
         if (ctx->currentToken.type == TYPE_LEFT_PAREN)
         {
             return parseCallArgs(ctx);
         }
         return ERROR_SUCCESS;
     }
-    return advance(ctx);  // literal
+
+    // Literal is one token
+    return advance(ctx);
 }
 
-// Push terminal and consume its tokens
+// Push the token group to the stack and read its tokens
 static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol in)
 {
     CHECK_ERR(precStackPush(stack, ITEM_TERM, in));
@@ -247,23 +259,25 @@ static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol in)
     return advance(ctx);
 }
 
-// Main shift/reduce loop; stack is freed by caller
+// Main loop: push or fold until the expression ends, caller frees the stack
 static int precParse(parcerContext* ctx, PrecStack* stack)
 {
-    int depth = 0;  // open '(' in this expression
-    // Operand expected at start
+    // Number of open parentheses in this expression
+    int depth = 0;
+    // At the start we wait for an operand
     bool expectOperand = true;
-    CHECK_ERR(precStackPush(stack, ITEM_TERM, PS_END));  // bottom $
+    // Bottom of the stack
+    CHECK_ERR(precStackPush(stack, ITEM_TERM, PS_END));
 
     while (1)
     {
-        // '(' needs lookahead for '()'
+        // For ( look ahead to see if it is ()
         if (ctx->currentToken.type == TYPE_LEFT_PAREN) CHECK_ERR(peek(ctx));
 
         PrecSymbol in = precClassify(ctx, depth, expectOperand);
         PrecSymbol top = stack->items[precStackTopTerm(stack)].sym;
 
-        // Input ended and only $ E left
+        // Input is over: success only if one expression is left
         if (top == PS_END && in == PS_END)
         {
             if (stack->count == 2 && stack->items[1].kind == ITEM_EXPR)
@@ -275,6 +289,7 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
             return ERROR_SYNTAX;
         }
 
+        // Table says what to do next
         switch (precTable[top][in])
         {
             case '<':
@@ -284,33 +299,34 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
             case '=':
                 CHECK_ERR(precShift(ctx, stack, in));
                 break;
+            // Folding reads no token, so go to the next step at once
             case '>':
                 CHECK_ERR(precReduce(stack, ctx->currentToken.line));
-                continue;  // depth unchanged by reduce
+                continue;
             default:
                 fprintf(stderr, "Syntax err in line %d: invalid expression\n",
                         ctx->currentToken.line);
                 return ERROR_SYNTAX;
         }
 
-        // Track parens after shift
+        // Count parentheses after a push
         if (in == PS_LPAREN) depth++;
         if (in == PS_RPAREN) depth--;
-        // After operand or ')' an operator follows
+        // After an operand or ) an operator must follow
         expectOperand = !(in == PS_OPERAND || in == PS_RPAREN);
     }
 }
 
+// Parse one expression, the stack is freed here on every exit
 int parseExpression(parcerContext* ctx)
 {
     PrecStack stack = {.items = NULL, .count = 0, .capacity = 0};
-    // Single free point for every exit
     int err = precParse(ctx, &stack);
     free(stack.items);
     return err;
 }
 
-// Tokens that can begin an expression: operand, '(' or unary operator
+// True if the token can start an expression
 bool canStartExpression(Type type)
 {
     switch (type)

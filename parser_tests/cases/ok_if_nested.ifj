@@ -1,0 +1,15 @@
+import ifj26.*
+def f(x: Int): Int =
+  while x > 0 do
+    if x == 3 then
+      return x
+    x = x - 1
+  if x < 0 then
+    if x < -5 then
+      print(1)
+  else
+    print(2)
+  return 0
+@main def m(): Unit =
+  if true then
+    f(4)
