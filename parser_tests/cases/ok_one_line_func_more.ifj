@@ -1,0 +1,6 @@
+import ifj26.*
+def add(a: Int, b: Int): Int = a + b * 2
+def g() = add(1, 2)
+def h(x: Int) = x
+def u(): Unit = print("a")
+@main def m(): Unit = g()
