@@ -248,9 +248,52 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == '\n') scanner->line++;
                 continue;
             }
-            ungetc(next, scanner->stream);
+            else if (next == '*')
+            {
+                int commentLevel = 1;
+                bool hasNewlineInside = false;
+                while (commentLevel > 0)
+                {
+                    c = fgetc(scanner->stream);
+                    if (c == EOF)
+                    {
+                        token->type = TYPE_ERROR;
+                        return 1;
+                    }
+                    if (c == '\n')
+                    {
+                        scanner->line++;
+                        hasNewlineInside = true;
+                    }
+                    else if (c == '/')
+                    {
+                        if ((next = fgetc(scanner->stream)) == '*')
+                            commentLevel++;
+                        else
+                            ungetc(next, scanner->stream);
+                    }
+                    else if (c == '*')
+                    {
+                        if ((next = fgetc(scanner->stream)) == '/')
+                            commentLevel--;
+                        else
+                            ungetc(next, scanner->stream);
+                    }
+                }
+                while ((c = fgetc(scanner->stream)) == ' ')
+                {
+                }
+                if (hasNewlineInside && c != '\n' && c != EOF)
+                {
+                    token->type = TYPE_ERROR;
+                    return 2;
+                }
+            }
+            else
+            {
+                ungetc(next, scanner->stream);
+            }
         }
-
 
         // handle eof token generation
         if (c == EOF)
@@ -296,11 +339,11 @@ int getToken(Token* token, Scanner* scanner)
                     break;
                 }
             }
-            // lexical error if indent level does not match stack
+            // syntax error if indent level does not match stack
             if (targetIndex == -1)
             {
                 token->type = TYPE_ERROR;
-                return 1;
+                return 2;
             }
 
             // count how many dedents to emit
@@ -333,6 +376,7 @@ int getToken(Token* token, Scanner* scanner)
                     continue;
                 }
 
+                token->line = scanner->line;
 
                 // handle end of line symbol
                 if (c == '\n')
@@ -883,6 +927,11 @@ int getToken(Token* token, Scanner* scanner)
                     break;
                 }
 
+                if (c == '_')
+                {
+                    break;
+                }
+
                 strFree(&attr);
                 token->type = TYPE_ERROR;
                 return 1;
@@ -939,6 +988,11 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     STR_TRY(strAppend(&attr, c));
                     state = STATE_DOUBLE_LITERAL;
+                    break;
+                }
+
+                if (c == '_')
+                {
                     break;
                 }
 
@@ -1014,6 +1068,11 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     STR_TRY(strAppend(&attr, c));
                     state = STATE_EXP_LITERAL;
+                    break;
+                }
+
+                if (c == '_')
+                {
                     break;
                 }
 
