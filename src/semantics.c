@@ -68,7 +68,7 @@ static Errors semanticsFirstPass(const astNode* prog, symtable* globalTable)
                 return ERROR_WRONG_ARGUMENTS;
             }
 
-            if (funcNode->retType != TYPE_UNIT)
+            if (funcNode->retType != S_TYPE_UNIT)
             {
                 return ERROR_TYPE_MISMATCH;
             }
@@ -99,9 +99,9 @@ static Errors semanticsFirstPass(const astNode* prog, symtable* globalTable)
             }
             paramTypes[j - 1] = funcNode->children[j]->retType;
         }
-        Errors status =
-            symtableInsertFunc(globalTable, funcNode->data.funcData.key,
-                               funcNode->retType, paramCount, paramTypes);
+        Errors status = symtableInsertFunc(
+            globalTable, funcNode->data.funcData.key, funcNode->retType,
+            paramCount, paramTypes, funcNode);
         free(paramTypes);
         if (status != 0)
         {
