@@ -485,7 +485,6 @@ static Errors checkVarDef(astNode* varNode, symtable* globalTable)
     {
         return ERROR_INTERNAL;
     }
-
     return 0;
 }
 static dataType checkExpr(astNode* exprNode, symtable* globalTable, Errors* err)
@@ -544,6 +543,7 @@ static Errors checkSet(astNode* setNode, symtable* globalTable)
         return ERROR_INTERNAL;
     }
 
+
     return 0;
 }
 
@@ -551,12 +551,49 @@ static Errors checkSet(astNode* setNode, symtable* globalTable)
 static Errors checkIf(astNode* ifNode, symtable* globalTable,
                       astNode* currentNode)
 {
-    if (ifNode == NULL || currentNode == NULL || ifNode->children[0] == NULL ||
-        globalTable == NULL)
+    if (ifNode == NULL || currentNode == NULL || ifNode->children[0] == NULL)
     {
         return ERROR_INTERNAL;
     }
+    Errors err = 0;
+    dataType type = checkExpr(ifNode->children[0], globalTable, &err);
+    if (err != 0)
+    {
+        return err;
+    }
+    if (type != S_TYPE_BOOL)
+    {
+        return ERROR_TYPE_MISMATCH;
+    }
+    if (ifNode->children[1] != NULL)
+    {
+        Errors status = stackPush(globalTable);
+        if (status != 0)
+        {
+            return status;
+        }
+        status = checkBlock(ifNode->children[1], globalTable, currentNode);
+        stackPop(globalTable);
+        if (status != 0)
+        {
+            return status;
+        }
+    }
+    if (ifNode->childCount > 2 && ifNode->children[2] != NULL)
+    {
+        Errors status = stackPush(globalTable);
+        if (status != 0)
+        {
+            return status;
+        }
+        status = checkBlock(ifNode->children[2], globalTable, currentNode);
+        stackPop(globalTable);
+        if (status != 0)
+        {
 
+            return status;
+        }
+    }
     return 0;
 }
 
@@ -569,6 +606,28 @@ static Errors checkWhile(astNode* whileNode, symtable* globalTable,
         whileNode->children[0] == NULL || whileNode->children[1] == NULL)
     {
         return ERROR_INTERNAL;
+    }
+    Errors err = 0;
+    dataType type = checkExpr(whileNode->children[0], globalTable, &err);
+    if (err != 0)
+    {
+        return err;
+    }
+    if (type != S_TYPE_BOOL)
+    {
+        return ERROR_TYPE_MISMATCH;
+    }
+
+    Errors status = stackPush(globalTable);
+    if (status != 0)
+    {
+        return status;
+    }
+    status = checkBlock(whileNode->children[1], globalTable, currentNode);
+    stackPop(globalTable);
+    if (status != 0)
+    {
+        return status;
     }
 
     return 0;
@@ -711,11 +770,26 @@ static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
                                Errors* err)
 {
     if (uNode == NULL || uNode->childCount < 1 || uNode->children == NULL ||
-        uNode->children[0] == NULL || globalTable == NULL)
+        uNode->children[0] == NULL)
     {
         *err = ERROR_INTERNAL;
         return S_TYPE_UNKNOWN;
     }
 
+    dataType type = checkExpr(uNode->children[0], globalTable, err);
+    if (type == S_TYPE_UNKNOWN || *err != 0)
+    {
+        return S_TYPE_UNKNOWN;
+    }
+
+    if ((uNode->data.opType == AST_OP_NEG ||
+         uNode->data.opType == AST_OP_POS) &&
+        (type == S_TYPE_INT || type == S_TYPE_DOUBLE))
+    {
+        uNode->retType = type;
+        return type;
+    }
+
+    *err = ERROR_TYPE_MISMATCH;
     return S_TYPE_UNKNOWN;
 }
