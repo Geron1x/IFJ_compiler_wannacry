@@ -67,7 +67,7 @@ typedef struct
     } while (0)
 
 // init empty string for lexeme
-int strInit(DynamicString* s)
+static int strInit(DynamicString* s)
 {
     s->capacity = 16;
     s->len = 0;
@@ -82,7 +82,7 @@ int strInit(DynamicString* s)
 }
 
 // free string memory
-void strFree(DynamicString* s)
+static void strFree(DynamicString* s)
 {
     if (s->data != NULL)
     {
@@ -94,7 +94,7 @@ void strFree(DynamicString* s)
 }
 
 // add char to lexeme string and resize buffer
-int strAppend(DynamicString* s, char c)
+static int strAppend(DynamicString* s, char c)
 {
     if (s->len + 1 >= s->capacity)
     {
@@ -121,31 +121,31 @@ typedef struct
 } Keyword;
 
 // list of reserved keywords
-Keyword Keywords[] = {{"def", TYPE_DEF},
-                      {"do", TYPE_DO},
-                      {"Double", TYPE_DOUBLE},
-                      {"else", TYPE_ELSE},
-                      {"if", TYPE_IF},
-                      {"import", TYPE_IMPORT},
-                      {"Int", TYPE_INT},
-                      {"return", TYPE_RETURN},
-                      {"String", TYPE_STRING},
-                      {"then", TYPE_THEN},
-                      {"Unit", TYPE_UNIT},
-                      {"val", TYPE_VAL},
-                      {"var", TYPE_VAR},
-                      {"while", TYPE_WHILE},
-                      {"Boolean", TYPE_BOOLEAN},
-                      {"true", TYPE_TRUE},
-                      {"false", TYPE_FALSE},
-                      {"for", TYPE_FOR},
-                      {"List", TYPE_LIST},
-                      {"case", TYPE_CASE},
-                      {"class", TYPE_CLASS},
-                      {"extension", TYPE_EXTENSION},
-                      {"match", TYPE_MATCH},
-                      {"type", TYPE_TYPE},
-                      {NULL, 0}};
+static const Keyword Keywords[] = {{"def", TYPE_DEF},
+                                   {"do", TYPE_DO},
+                                   {"Double", TYPE_DOUBLE},
+                                   {"else", TYPE_ELSE},
+                                   {"if", TYPE_IF},
+                                   {"import", TYPE_IMPORT},
+                                   {"Int", TYPE_INT},
+                                   {"return", TYPE_RETURN},
+                                   {"String", TYPE_STRING},
+                                   {"then", TYPE_THEN},
+                                   {"Unit", TYPE_UNIT},
+                                   {"val", TYPE_VAL},
+                                   {"var", TYPE_VAR},
+                                   {"while", TYPE_WHILE},
+                                   {"Boolean", TYPE_BOOLEAN},
+                                   {"true", TYPE_TRUE},
+                                   {"false", TYPE_FALSE},
+                                   {"for", TYPE_FOR},
+                                   {"List", TYPE_LIST},
+                                   {"case", TYPE_CASE},
+                                   {"class", TYPE_CLASS},
+                                   {"extension", TYPE_EXTENSION},
+                                   {"match", TYPE_MATCH},
+                                   {"type", TYPE_TYPE},
+                                   {NULL, 0}};
 
 // initialize scanner state and bind input stream
 void scannerInit(Scanner* scanner, FILE* stream)
