@@ -14,11 +14,12 @@ typedef struct
 {
     Token currentToken;
     Scanner* globalScanner;
-    Token peekToken;  // lookahead buffer
-    bool hasPeek;     // peekToken holds a token
+    Token peekToken;  // next token read ahead
+    bool hasPeek;     // true if peekToken is filled
+    Type prevType;    // type of the last read token
 } parcerContext;
 
-// Macro for automatic error propagation
+// Return the error right away if the call failed
 #define CHECK_ERR(call)                         \
     do                                          \
     {                                           \
@@ -27,12 +28,12 @@ typedef struct
                                                 \
     } while (0)
 
-// Token helpers (parser.c)
+// Work with tokens, written in parser.c
 int advance(parcerContext* ctx);
 int peek(parcerContext* ctx);
 int match(parcerContext* ctx, Type expectedType);
 
-// Call arguments, LL part (parser.c)
+// Call arguments, written in parser.c
 int parseCallArgs(parcerContext* ctx);
 
 #endif

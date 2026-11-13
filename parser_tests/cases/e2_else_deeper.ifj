@@ -1,0 +1,6 @@
+import ifj26.*
+@main def m(): Unit =
+  if x then
+    a()
+      else
+    b()

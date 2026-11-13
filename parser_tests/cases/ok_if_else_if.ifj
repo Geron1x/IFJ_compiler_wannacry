@@ -1,0 +1,11 @@
+import ifj26.*
+@main def m(): Unit =
+  if x == 1 then
+    a()
+  else if x == 2 then
+    b()
+  else if x == 3 then
+    c()
+  else
+    d()
+  e()
