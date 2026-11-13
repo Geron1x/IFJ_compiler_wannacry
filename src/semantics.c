@@ -353,7 +353,6 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
         }
         lastStat = bodyNode->children[bodyNode->childCount - 1];
     }
-
     switch (lastStat->nodeType)
     {
         case AST_EXPR_BINARY:
@@ -874,8 +873,95 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
         }
         return S_TYPE_UNKNOWN;
     }
+    int paramCount =
+        symtableGetFuncParamCount(globalTable, callNode->data.funcData.key);
+    if (paramCount == -1)
+    {
+        *err = ERROR_UNDEFINED_NAME;
+        return S_TYPE_UNKNOWN;
+    }
+    if (paramCount != callNode->childCount)
+    {
+        *err = ERROR_WRONG_ARGUMENTS;
+        return S_TYPE_UNKNOWN;
+    }
+    dataType type = S_TYPE_UNKNOWN;
+    dataType expectedType = S_TYPE_UNKNOWN;
+    for (int i = 0; i < paramCount; i++)
+    {
+        type = checkExpr(callNode->children[i], globalTable, err);
+        if (*err != 0)
+        {
+            return S_TYPE_UNKNOWN;
+        }
+        expectedType = symtableGetFuncParamType(globalTable,
+                                                callNode->data.funcData.key, i);
 
-    return 0;
+        if (expectedType == S_TYPE_ANY)
+        {
+            if (type == S_TYPE_UNKNOWN)
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+        }
+        else
+        {
+            if (expectedType != type)
+            {
+                if (type == S_TYPE_INT && expectedType == S_TYPE_DOUBLE)
+                {
+                    callNode->children[i]->int2float = true;
+                }
+                else
+                {
+                    *err = ERROR_WRONG_ARGUMENTS;
+                    return S_TYPE_UNKNOWN;
+                }
+            }
+            else if (expectedType == S_TYPE_UNKNOWN)
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+        }
+    }
+    dataType retType =
+        symtableGetFuncReturn(globalTable, callNode->data.funcData.key);
+    if (retType == S_TYPE_UNKNOWN)
+    {
+        if (symtableGetFuncIsAnalyzing(globalTable,
+                                       callNode->data.funcData.key) == true)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+        astNode* node =
+            symtableGetFuncNode(globalTable, callNode->data.funcData.key);
+        if (node == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+        symtable* callContext = NULL;
+        callContext = symtableCreateFuncContext(globalTable);
+        if (callContext == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+        *err = checkFunctionBody(node, callContext);
+        stackDestroy(callContext);
+        free(callContext);
+        if (*err != 0)
+        {
+            return S_TYPE_UNKNOWN;
+        }
+        retType =
+            symtableGetFuncReturn(globalTable, callNode->data.funcData.key);
+    }
+    callNode->retType = retType;
+    return retType;
 }
 
 
