@@ -1,5 +1,5 @@
 /**
- * @file ast.h
+ * @file ast.c
  * @brief File for the AST implementation
  *
  * Project: Implementace překladače imperativního jazyka IFJ26
@@ -42,6 +42,7 @@ static Errors expand(astNode* node)
     {
         return ERROR_INTERNAL;
     }
+    /** Grow the child array before inserting a new node */
     if (node->childCapacity == 0)
     {
         node->childCapacity = AST_INIT_CAPACITY;
@@ -248,6 +249,7 @@ Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
     if ((*retNode)->data.funcData.key == NULL)
     {
         free(*retNode);
+        *retNode = NULL;
         return ERROR_INTERNAL;
     }
     strcpy((*retNode)->data.funcData.key, key);
@@ -257,6 +259,7 @@ Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
     {
         free((*retNode)->data.funcData.key);
         free(*retNode);
+        *retNode = NULL;
         return status;
     }
 
@@ -551,7 +554,9 @@ void astDestroy(astNode* node)
     if (node->nodeType == AST_STAT_SET || node->nodeType == AST_STAT_VAR ||
         node->nodeType == AST_EXPR_VAR)
     {
-        free(node->data.varData.key);
+        free(node->data.varData
+                 .key); /** DANGEROUS PART, POSSIBLE MEM LEAK IF PARSER MAKE
+                           MISTAKE IN AST NODE CREATION OF A LITERAL */
     }
     if (node->nodeType == AST_FUNC || node->nodeType == AST_EXPR_CALL)
     {
