@@ -17,6 +17,7 @@
 
 typedef struct astNode astNode;
 
+/** Types of nodes stored in the abstract syntax tree */
 typedef enum astnodetype
 {
     AST_PROG,
@@ -35,6 +36,7 @@ typedef enum astnodetype
     /** ADD OTHER TYPES WITH EXTENTIONS */
 } astNodeType;
 
+/** Operators stored in expression nodes */
 typedef enum astoptype
 {
     AST_OP_ADD,

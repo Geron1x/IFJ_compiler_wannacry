@@ -9,6 +9,8 @@
  */
 
 
+#include "semantics.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -46,7 +48,7 @@ static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
 static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
                               Errors* err);
 
-
+/** Run semantic analysis in declaration and body passes */
 Errors semanticsCheck(const astNode* prog)
 {
     if (prog == NULL)
@@ -79,6 +81,7 @@ Errors semanticsCheck(const astNode* prog)
     }
     return 0;
 }
+/** Register all function declarations before checking their bodies */
 static Errors semanticsFirstPass(const astNode* prog, symtable* globalTable)
 {
     int mainFoundCount = 0;
@@ -102,7 +105,8 @@ static Errors semanticsFirstPass(const astNode* prog, symtable* globalTable)
                 return ERROR_WRONG_ARGUMENTS;
             }
 
-            if (funcNode->retType != S_TYPE_UNIT)
+            if (funcNode->retType != S_TYPE_UNIT &&
+                funcNode->retType != S_TYPE_UNKNOWN)
             {
                 return ERROR_TYPE_MISMATCH;
             }
@@ -155,6 +159,7 @@ static Errors semanticsFirstPass(const astNode* prog, symtable* globalTable)
 
     return 0;
 }
+/** Check function bodies after all function signatures are available */
 static Errors semanticsSecondPass(const astNode* prog, symtable* globalTable)
 {
     int childNum = prog->childCount;
@@ -171,9 +176,16 @@ static Errors semanticsSecondPass(const astNode* prog, symtable* globalTable)
         {
             return status;
         }
+        if (funcNode->data.funcData.isMain &&
+            symtableGetFuncReturn(globalTable, funcNode->data.funcData.key) !=
+                S_TYPE_UNIT)
+        {
+            return ERROR_TYPE_MISMATCH;
+        }
     }
     return 0;
 }
+/** Check one function and resolve its return type */
 static Errors checkFunctionBody(astNode* funcNode, symtable* globalTable)
 {
     if (symtableGetFuncIsChecked(globalTable, funcNode->data.funcData.key) ==
@@ -182,12 +194,14 @@ static Errors checkFunctionBody(astNode* funcNode, symtable* globalTable)
         return 0;
     }
 
-
     symtableSetFuncIsAnalyzing(globalTable, funcNode->data.funcData.key, true);
 
-    stackPush(globalTable);
+    Errors status = stackPush(globalTable);
+    if (status != 0)
+    {
+        return status;
+    }
     int paramCount = funcNode->childCount;
-    Errors status = 0;
     for (int i = 1; i < paramCount; i++)
     {
         status =
@@ -252,6 +266,7 @@ static Errors checkFunctionBody(astNode* funcNode, symtable* globalTable)
     return 0;
 }
 
+/** check whether the end of a block returns or produces unit */
 static void analyzeEnd(astNode* node, bool* allReturn, bool* allUnit)
 {
     if (node == NULL)
@@ -329,6 +344,7 @@ static void analyzeEnd(astNode* node, bool* allReturn, bool* allUnit)
             return;
     }
 }
+/** resolve the type produced by the last statement of a function body */
 static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
                                 Errors* err)
 {
@@ -405,6 +421,7 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
     }
 }
 
+/** Check all statements in one block */
 static Errors checkBlock(astNode* blockNode, symtable* globalTable,
                          astNode* currentFunc)
 {
@@ -757,6 +774,7 @@ static Errors checkReturn(astNode* returnNode, symtable* globalTable,
 }
 
 
+/** Check operand types and numeric conversions for a binary expression */
 static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
                                 Errors* err)
 {
@@ -861,6 +879,7 @@ static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
 }
 
 
+/** Check function existence, arguments and recursive calls */
 static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
                               Errors* err)
 {

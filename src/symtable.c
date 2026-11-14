@@ -554,6 +554,7 @@ void stackDestroy(symtable* symtable)
         /** top of the stack is empty and should point at NULL */
         free(temp);
     }
+    symtable->scopeLevel = 0;
     symtable->top = NULL;
 }
 Errors symtableInit(symtable** symTable)
@@ -594,6 +595,8 @@ symtable* symtableCreateFuncContext(symtable* globalTable)
 
     newTable->funcTree = globalTable->funcTree;
     newTable->top = NULL;
+    newTable->scopeLevel = 0;
+    newTable->varInstanceCounter = 0;
 
     return newTable;
 }
