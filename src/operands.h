@@ -46,4 +46,12 @@ Errors writeLiteralInt(long long intValue);
  */
 Errors writeLiteralNil(void);
 
+/**
+ * @brief Prints float@ and number to the output
+ *
+ * @param floatValue
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+Errors writeLiteralFloat(double floatValue);
+
 #endif

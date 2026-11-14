@@ -57,3 +57,14 @@ Errors writeLiteralNil(void)
 {
     return tryPrint("nil@nil");
 }
+
+/** Prints float value */
+Errors writeLiteralFloat(double floatValue)
+{
+    if (printf("float@%a", floatValue) < 0)  // %a means in hex form
+    {
+        return ERROR_INTERNAL;
+    }
+
+    return ERROR_SUCCESS;
+}
