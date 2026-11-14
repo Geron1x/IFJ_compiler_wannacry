@@ -68,3 +68,42 @@ Errors writeLiteralFloat(double floatValue)
 
     return ERROR_SUCCESS;
 }
+
+/** Prints string@ and chars */
+Errors writeLiteralString(const char* stringValue)
+{
+    if (stringValue == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    // prints: string@
+    if (tryPrint("string@") != ERROR_SUCCESS)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    for (size_t i = 0; stringValue[i] != '\0'; i++)
+    {
+        unsigned char currentChar = (unsigned char)stringValue[i];
+
+        // 35 -> # ;    92 -> \ ;   >=127 -> not printable ASCII
+        if (currentChar <= 32 || currentChar == 35 || currentChar == 92 ||
+            currentChar >= 127)
+        {
+            if (printf("\\%03d", currentChar) < 0)  // char with \ in start
+            {
+                return ERROR_INTERNAL;
+            }
+        }
+        else
+        {
+            if (fputc(currentChar, stdout) == EOF)  // print normal char
+            {
+                return ERROR_INTERNAL;
+            }
+        }
+    }
+
+    return ERROR_SUCCESS;
+}
