@@ -165,6 +165,21 @@ void scannerInit(Scanner* scanner, FILE* stream)
     scanner->modeTop = 0;
 }
 
+// push new lexer mode onto stack with overflow check
+static int pushMode(Scanner* scanner, ScannerMode mode)
+{
+    int maxDepth =
+        (int)(sizeof(scanner->modeStack) / sizeof(scanner->modeStack[0]));
+    if (scanner->modeTop + 1 >= maxDepth)
+    {
+        fprintf(stderr, "Maximum string interpolation usage\n");
+        return 99;
+    }
+    scanner->modeTop++;
+    scanner->modeStack[scanner->modeTop] = mode;
+    return 0;
+}
+
 // read next token from input stream
 int getToken(Token* token, Scanner* scanner)
 {
@@ -596,9 +611,11 @@ int getToken(Token* token, Scanner* scanner)
                             // multiline interpolated string start: s"""
                             if (next3 == '"')
                             {
-                                scanner->modeTop++;
-                                scanner->modeStack[scanner->modeTop] =
-                                    MODE_INTERP_MULTI;
+                                if (pushMode(scanner, MODE_INTERP_MULTI) != 0)
+                                {
+                                    token->type = TYPE_ERROR;
+                                    return 99;
+                                }
                                 token->type = TYPE_INTERP_START;
                                 return 0;
                             }
@@ -608,9 +625,11 @@ int getToken(Token* token, Scanner* scanner)
                         ungetc(next2, scanner->stream);
 
                         // singleline interpolated string start: s"
-                        scanner->modeTop++;
-                        scanner->modeStack[scanner->modeTop] =
-                            MODE_INTERP_SINGLE;
+                        if (pushMode(scanner, MODE_INTERP_SINGLE) != 0)
+                        {
+                            token->type = TYPE_ERROR;
+                            return 99;
+                        }
                         token->type = TYPE_INTERP_START;
                         return 0;
                     }
@@ -870,7 +889,7 @@ int getToken(Token* token, Scanner* scanner)
                 }
 
                 // lexical error on leading zero
-                if (isdigit(c))
+                if (isdigit(c) || c == '_')
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
@@ -1293,10 +1312,13 @@ int getToken(Token* token, Scanner* scanner)
                     // embedded expression: ${expr}
                     if (next == '{')
                     {
-                        scanner->modeTop++;
-                        scanner->modeStack[scanner->modeTop] = MODE_DEFAULT;
-                        token->type = TYPE_LEFT_BRACE;
                         strFree(&attr);
+                        if (pushMode(scanner, MODE_DEFAULT) != 0)
+                        {
+                            token->type = TYPE_ERROR;
+                            return 99;
+                        }
+                        token->type = TYPE_LEFT_BRACE;
                         return 0;
                     }
 
@@ -1475,10 +1497,13 @@ int getToken(Token* token, Scanner* scanner)
 
                     if (next == '{')
                     {
-                        scanner->modeTop++;
-                        scanner->modeStack[scanner->modeTop] = MODE_DEFAULT;
-                        token->type = TYPE_LEFT_BRACE;
                         strFree(&attr);
+                        if (pushMode(scanner, MODE_DEFAULT) != 0)
+                        {
+                            token->type = TYPE_ERROR;
+                            return 99;
+                        }
+                        token->type = TYPE_LEFT_BRACE;
                         return 0;
                     }
 
