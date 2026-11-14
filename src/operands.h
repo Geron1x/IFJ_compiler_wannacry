@@ -54,4 +54,12 @@ Errors writeLiteralNil(void);
  */
 Errors writeLiteralFloat(double floatValue);
 
+/**
+ * @brief Prints string@ and chars to the output
+ *
+ * @param stringValue
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+Errors writeLiteralString(const char* stringValue);
+
 #endif
