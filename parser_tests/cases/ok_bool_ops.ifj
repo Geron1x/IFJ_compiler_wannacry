@@ -1,0 +1,10 @@
+import ifj26.*
+def g(x: Boolean): Boolean =
+  return !x
+@main def m(): Unit =
+  val a = !b && c || d
+  val e = !!a
+  val h = a < 3 == false
+  val k = !(a || b) && g(true)
+  val n = x + 1 > y && -z <= 2 || !q != r
+  true

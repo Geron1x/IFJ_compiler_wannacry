@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val b = a + 1 >= b * 2
+  val e = a == b

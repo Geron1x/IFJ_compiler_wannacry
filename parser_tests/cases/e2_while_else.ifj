@@ -1,0 +1,6 @@
+import ifj26.*
+@main def m(): Unit =
+  while x do
+    a()
+  else
+    b()

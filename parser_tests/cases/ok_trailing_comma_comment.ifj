@@ -1,0 +1,6 @@
+import ifj26.*
+@main def m(): Unit =
+  f(1, /* c
+  */)
+  g(2, // c
+  )

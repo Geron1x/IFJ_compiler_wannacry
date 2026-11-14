@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val x = a + b * (c - 1)
+  x = (a + b) / 2

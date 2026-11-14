@@ -5,7 +5,7 @@ CFLAGS := -std=c11 -Wall -Wextra -g
 TARGET_EXEC := compiler
 
 # Automagic file discovery
-SRCS := $(wildcard src/*.c *.c)
+SRCS := $(wildcard src/*.c src/*/*.c *.c)
 OBJS := $(patsubst %.c,%.o,$(SRCS))
 
 .PHONY: build clean
@@ -13,7 +13,7 @@ OBJS := $(patsubst %.c,%.o,$(SRCS))
 build: $(TARGET_EXEC)
 
 clean:
-	rm -f *.o src/*.o $(TARGET_EXEC)
+	rm -f *.o src/*.o src/*/*.o $(TARGET_EXEC)
 
 # Compilation rules
 $(TARGET_EXEC): $(OBJS)
