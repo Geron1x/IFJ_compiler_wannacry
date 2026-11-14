@@ -31,4 +31,12 @@ Errors tryPrint(const char* code);
  */
 Errors writeLiteralBool(bool boolValue);
 
+/**
+ * @brief Prints int@ and the number to the output
+ *
+ * @param intValue
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+Errors writeLiteralInt(long long intValue);
+
 #endif

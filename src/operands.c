@@ -40,3 +40,14 @@ Errors writeLiteralBool(bool boolValue)
         return tryPrint("bool@false");
     }
 }
+
+/** Prints int value to stdout */
+Errors writeLiteralInt(long long intValue)
+{
+    if (printf("int@%lld", intValue) < 0)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    return ERROR_SUCCESS;
+}
