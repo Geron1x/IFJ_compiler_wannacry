@@ -51,3 +51,9 @@ Errors writeLiteralInt(long long intValue)
 
     return ERROR_SUCCESS;
 }
+
+/** Prints nil (nothing) */
+Errors writeLiteralNil(void)
+{
+    return tryPrint("nil@nil");
+}

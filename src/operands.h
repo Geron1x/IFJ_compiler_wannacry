@@ -39,4 +39,11 @@ Errors writeLiteralBool(bool boolValue);
  */
 Errors writeLiteralInt(long long intValue);
 
+/**
+ * @brief Prints nil@nil to the output
+ *
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+Errors writeLiteralNil(void);
+
 #endif
