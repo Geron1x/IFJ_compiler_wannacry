@@ -15,6 +15,7 @@
 #include "bst.h"
 #include "error.h"
 
+/** Types stored in the semantic symbol table */
 typedef enum
 {
     S_TYPE_UNIT,
@@ -26,6 +27,7 @@ typedef enum
     S_TYPE_UNKNOWN
 } dataType;
 
+/** Kinds of identifiers stored in the symbol table */
 typedef enum
 {
     TYPE_FUNCTION,
@@ -51,18 +53,21 @@ int symtableGetFuncParamCount(symtable* table, const char* key);
 dataType symtableGetFuncParamType(symtable* table, const char* key, int index);
 /**
  * @brief Returns whether a function is being analyzed
+ * (flag to identify recurion)
  */
 bool symtableGetFuncIsAnalyzing(symtable* table, const char* key);
 /**
- * @brief Sets whether a function is being analyzed
+ * @brief Sets whether a function is being analyzed (flag to identify recurion)
  */
 void symtableSetFuncIsAnalyzing(symtable* table, const char* key, bool status);
 /**
- * @brief Returns whether a function has been checked
+ * @brief Returns whether a function has been checked (flag to show that the
+ * function was already analyzed)
  */
 bool symtableGetFuncIsChecked(symtable* table, const char* key);
 /**
- * @brief Sets whether a function has been checked
+ * @brief Sets whether a function has been checked (flag to show that the
+ * function was already analyzed)
  */
 void symtableSetFuncIsChecked(symtable* table, const char* key, bool status);
 /**
