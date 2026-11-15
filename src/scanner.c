@@ -43,15 +43,15 @@ typedef struct
     int capacity;
 } DynamicString;
 
-#define STR_TRY(call)       \
-    do                      \
-    {                       \
-        int _err = (call);  \
-        if (_err != 0)      \
-        {                   \
-            strFree(&attr); \
-            return _err;    \
-        }                   \
+#define STR_TRY(call)              \
+    do                             \
+    {                              \
+        int _err = (call);         \
+        if (_err != ERROR_SUCCESS) \
+        {                          \
+            strFree(&attr);        \
+            return _err;           \
+        }                          \
     } while (0)
 
 #define ALLOC_TOKEN(target, type, size)         \
@@ -62,7 +62,7 @@ typedef struct
         {                                       \
             fprintf(stderr, "Out of memory\n"); \
             strFree(&attr);                     \
-            return 99;                          \
+            return ERROR_INTERNAL;              \
         }                                       \
     } while (0)
 
@@ -75,10 +75,10 @@ static int strInit(DynamicString* s)
     if (s->data == NULL)
     {
         fprintf(stderr, "Out of memory");
-        return 99;
+        return ERROR_INTERNAL;
     }
     s->data[0] = '\0';
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // free string memory
@@ -104,13 +104,13 @@ static int strAppend(DynamicString* s, char c)
         if (newData == NULL)
         {
             fprintf(stderr, "Out of memory in realloc!\n");
-            return 99;
+            return ERROR_INTERNAL;
         }
         s->data = newData;
     }
     s->data[s->len++] = c;
     s->data[s->len] = '\0';
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // struct for keyword and token mapping
@@ -172,11 +172,11 @@ static int pushMode(Scanner* scanner, ScannerMode mode)
     if (scanner->modeTop + 1 >= maxDepth)
     {
         fprintf(stderr, "Maximum string interpolation usage\n");
-        return 99;
+        return ERROR_INTERNAL;
     }
     scanner->modeTop++;
     scanner->modeStack[scanner->modeTop] = mode;
-    return 0;
+    return ERROR_SUCCESS;
 }
 
 // read next token from input stream
@@ -201,7 +201,7 @@ int getToken(Token* token, Scanner* scanner)
     {
         scanner->pendingDedents--;
         token->type = TYPE_DEDENT;
-        return 0;
+        return ERROR_SUCCESS;
     }
 
     // check indent logic at start of line
@@ -244,7 +244,7 @@ int getToken(Token* token, Scanner* scanner)
         if (c == '\t')
         {
             token->type = TYPE_ERROR;
-            return 1;
+            return ERROR_LEXICAL;
         }
 
         // check start of line comment
@@ -271,7 +271,7 @@ int getToken(Token* token, Scanner* scanner)
                         if (c == EOF)
                         {
                             token->type = TYPE_ERROR;
-                            return 1;
+                            return ERROR_LEXICAL;
                         }
                         if (c == '\n')
                         {
@@ -339,7 +339,7 @@ int getToken(Token* token, Scanner* scanner)
                 if (hasNewlineInside && c != '\n' && c != EOF)
                 {
                     token->type = TYPE_ERROR;
-                    return 2;
+                    return ERROR_SYNTAX;
                 }
             }
             else
@@ -355,10 +355,10 @@ int getToken(Token* token, Scanner* scanner)
             {
                 scanner->indentTop--;
                 token->type = TYPE_DEDENT;
-                return 0;
+                return ERROR_SUCCESS;
             }
             token->type = TYPE_EOF;
-            return 0;
+            return ERROR_SUCCESS;
         }
 
         // skip empty line before indent check
@@ -377,7 +377,7 @@ int getToken(Token* token, Scanner* scanner)
             scanner->indentTop++;
             scanner->indentStack[scanner->indentTop] = spaces;
             token->type = TYPE_INDENT;
-            return 0;
+            return ERROR_SUCCESS;
         }
 
         // check for dedent token generation
@@ -396,7 +396,7 @@ int getToken(Token* token, Scanner* scanner)
             if (targetIndex == -1)
             {
                 token->type = TYPE_ERROR;
-                return 2;
+                return ERROR_SYNTAX;
             }
 
             // count how many dedents to emit
@@ -406,7 +406,7 @@ int getToken(Token* token, Scanner* scanner)
             // save extra dedents for subsequent tokens
             scanner->pendingDedents = dedentCount - 1;
             token->type = TYPE_DEDENT;
-            return 0;
+            return ERROR_SUCCESS;
         }
 
         break;
@@ -442,7 +442,7 @@ int getToken(Token* token, Scanner* scanner)
                     token->line = scanner->line;
                     scanner->atLineStart = true;
                     token->type = TYPE_EOL;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 // handle right paren token
@@ -453,38 +453,38 @@ int getToken(Token* token, Scanner* scanner)
                         scanner->parenLevel--;
                     }
                     token->type = TYPE_RIGHT_PAREN;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == ':')
                 {
                     token->type = TYPE_DOUBLE_DOT;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == ',')
                 {
                     token->type = TYPE_COMMA;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == ';')
                 {
                     token->type = TYPE_SEMICOLON;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == '-')
                 {
                     token->type = TYPE_SUB;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == '[')
                 {
                     scanner->parenLevel++;
                     token->type = TYPE_LEFT_BRACKET;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == ']')
@@ -494,7 +494,7 @@ int getToken(Token* token, Scanner* scanner)
                         scanner->parenLevel--;
                     }
                     token->type = TYPE_RIGHT_BRACKET;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 // handle right brace returning from interpolation expression
@@ -506,10 +506,10 @@ int getToken(Token* token, Scanner* scanner)
                         scanner
                             ->modeTop--;  // pop MODE_DEFAULT, return to string
                         token->type = TYPE_RIGHT_BRACE;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 if (c == '&')
@@ -518,11 +518,11 @@ int getToken(Token* token, Scanner* scanner)
                     if (next == '&')
                     {
                         token->type = TYPE_AND;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
                     ungetc(next, scanner->stream);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 if (c == '|')
@@ -531,11 +531,11 @@ int getToken(Token* token, Scanner* scanner)
                     if (next == '|')
                     {
                         token->type = TYPE_OR;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
                     ungetc(next, scanner->stream);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
 
@@ -545,17 +545,17 @@ int getToken(Token* token, Scanner* scanner)
                     if (next == '+')
                     {
                         token->type = TYPE_CONCAT;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
                     ungetc(next, scanner->stream);
                     token->type = TYPE_ADD;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == '*')
                 {
                     token->type = TYPE_MUL;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == '/')
@@ -616,7 +616,7 @@ int getToken(Token* token, Scanner* scanner)
                             token->type = TYPE_STRING_LITERAL;
                             ALLOC_TOKEN(token->value.string, char*, 1);
                             token->value.string[0] = '\0';
-                            return 0;
+                            return ERROR_SUCCESS;
                         }
                     }
                     // fallback to single line string state
@@ -648,13 +648,14 @@ int getToken(Token* token, Scanner* scanner)
                             // multiline interpolated string start: s"""
                             if (next3 == '"')
                             {
-                                if (pushMode(scanner, MODE_INTERP_MULTI) != 0)
+                                if (pushMode(scanner, MODE_INTERP_MULTI) !=
+                                    ERROR_SUCCESS)
                                 {
                                     token->type = TYPE_ERROR;
-                                    return 99;
+                                    return ERROR_INTERNAL;
                                 }
                                 token->type = TYPE_INTERP_START;
-                                return 0;
+                                return ERROR_SUCCESS;
                             }
                             // fallback if only s"" encountered
                             ungetc(next3, scanner->stream);
@@ -662,13 +663,14 @@ int getToken(Token* token, Scanner* scanner)
                         ungetc(next2, scanner->stream);
 
                         // singleline interpolated string start: s"
-                        if (pushMode(scanner, MODE_INTERP_SINGLE) != 0)
+                        if (pushMode(scanner, MODE_INTERP_SINGLE) !=
+                            ERROR_SUCCESS)
                         {
                             token->type = TYPE_ERROR;
-                            return 99;
+                            return ERROR_INTERNAL;
                         }
                         token->type = TYPE_INTERP_START;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
                     // not an interpolated string prefix, rollback character
                     ungetc(next1, scanner->stream);
@@ -693,7 +695,7 @@ int getToken(Token* token, Scanner* scanner)
                         if (next != expected[i])
                         {
                             token->type = TYPE_ERROR;
-                            return 1;
+                            return ERROR_LEXICAL;
                         }
                     }
 
@@ -703,13 +705,13 @@ int getToken(Token* token, Scanner* scanner)
                     if (isalnum(next) || next == '_')
                     {
                         token->type = TYPE_ERROR;
-                        return 1;
+                        return ERROR_LEXICAL;
                     }
 
                     ungetc(next, scanner->stream);
 
                     token->type = TYPE_MAIN;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 // handle left paren token
@@ -717,7 +719,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     scanner->parenLevel++;
                     token->type = TYPE_LEFT_PAREN;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 // check double literal starting with dot or dot token
@@ -734,7 +736,7 @@ int getToken(Token* token, Scanner* scanner)
                     }
                     ungetc(next, scanner->stream);
                     token->type = TYPE_DOT;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
 
@@ -745,15 +747,15 @@ int getToken(Token* token, Scanner* scanner)
                     {
                         scanner->indentTop--;
                         token->type = TYPE_DEDENT;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
                     scanner->atLineStart = false;
                     token->type = TYPE_EOF;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
                 // lexical error for unhandled characters
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
                 break;
 
 
@@ -762,51 +764,51 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == '=')
                 {
                     token->type = TYPE_EQUAL;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
                 if (c == '>')
                 {
                     token->type = TYPE_ARROW;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
                 ungetc(c, scanner->stream);
                 token->type = TYPE_ASSIGNMENT;
-                return 0;
+                return ERROR_SUCCESS;
             // resolve lesser or lesser equal operator
             case STATE_LESSER:
                 if (c == '=')
                 {
                     token->type = TYPE_LESSER_EQUAL;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
                 if (c == '-')
                 {
                     token->type = TYPE_LARROW;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
                 ungetc(c, scanner->stream);
                 token->type = TYPE_LESSER;
-                return 0;
+                return ERROR_SUCCESS;
             // resolve bigger or bigger equal operator
             case STATE_BIGGER:
                 if (c == '=')
                 {
                     token->type = TYPE_BIGGER_EQUAL;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
                 ungetc(c, scanner->stream);
                 token->type = TYPE_BIGGER;
-                return 0;
+                return ERROR_SUCCESS;
             // resolve not equal operator
             case STATE_EXCLAMATION:
                 if (c == '=')
                 {
                     token->type = TYPE_NOT_EQUAL;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
                 ungetc(c, scanner->stream);
                 token->type = TYPE_EXCLAMATION;
-                return 0;
+                return ERROR_SUCCESS;
             // resolve divide operator or comment
             case STATE_SLASH:
                 if (c == '/')
@@ -822,14 +824,14 @@ int getToken(Token* token, Scanner* scanner)
                 }
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DIV;
-                return 0;
+                return ERROR_SUCCESS;
             // read multiline block comment
             case STATE_BLOCK_COMMENT:
 
                 if (c == EOF)
                 {
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 if (c == '\n')
@@ -867,7 +869,7 @@ int getToken(Token* token, Scanner* scanner)
                             {
                                 scanner->atLineStart = true;
                                 token->type = TYPE_EOL;
-                                return 0;
+                                return ERROR_SUCCESS;
                             }
                             state = STATE_START;
                         }
@@ -893,7 +895,7 @@ int getToken(Token* token, Scanner* scanner)
                     token->line = scanner->line;
                     scanner->atLineStart = true;
                     token->type = TYPE_EOL;
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == EOF)
@@ -925,14 +927,14 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 ungetc(c, scanner->stream);
                 token->type = TYPE_INT_LITERAL;
                 token->value.numberInt = 0;
                 strFree(&attr);
-                return 0;
+                return ERROR_SUCCESS;
 
             // read integer literal lexeme
             case STATE_INT_LITERAL:
@@ -967,7 +969,7 @@ int getToken(Token* token, Scanner* scanner)
                 token->type = TYPE_INT_LITERAL;
                 token->value.numberInt = strtoll(attr.data, NULL, 10);
                 strFree(&attr);
-                return 0;
+                return ERROR_SUCCESS;
 
             // read underscore inside int literal
             case STATE_INT_UNDERSCORE:
@@ -985,7 +987,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 strFree(&attr);
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
             // switch to double literal state
             case STATE_DOT:
                 if (isdigit(c))
@@ -996,7 +998,7 @@ int getToken(Token* token, Scanner* scanner)
                 }
                 strFree(&attr);
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
 
             // read double literal lexeme
             case STATE_DOUBLE_LITERAL:
@@ -1024,14 +1026,14 @@ int getToken(Token* token, Scanner* scanner)
                     token->type = TYPE_DOUBLE_LITERAL;
                     token->value.numberFloat = strtod(attr.data, NULL);
                     strFree(&attr);
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
                 token->value.numberFloat = strtod(attr.data, NULL);
                 strFree(&attr);
-                return 0;
+                return ERROR_SUCCESS;
 
             // read underscore inside double literal
             case STATE_DOUBLE_UNDERSCORE:
@@ -1049,7 +1051,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 strFree(&attr);
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
 
             // switch to exponent state
             case STATE_EXP:
@@ -1069,7 +1071,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 strFree(&attr);
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
 
             // read exponent sign symbol
             case STATE_EXP_SIGN:
@@ -1082,7 +1084,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 strFree(&attr);
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
 
 
             // read exponent literal lexeme
@@ -1104,14 +1106,14 @@ int getToken(Token* token, Scanner* scanner)
                     token->type = TYPE_DOUBLE_LITERAL;
                     token->value.numberFloat = strtod(attr.data, NULL);
                     strFree(&attr);
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
                 token->value.numberFloat = strtod(attr.data, NULL);
                 strFree(&attr);
-                return 0;
+                return ERROR_SUCCESS;
 
             // read underscore inside exponent literal
             case STATE_EXP_UNDERSCORE:
@@ -1129,7 +1131,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 strFree(&attr);
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
 
             // read identifier lexeme string
             case STATE_IDENTIFIER:
@@ -1145,7 +1147,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 token->type = TYPE_IDENTIFIER;
@@ -1168,7 +1170,7 @@ int getToken(Token* token, Scanner* scanner)
                 }
 
                 strFree(&attr);
-                return 0;
+                return ERROR_SUCCESS;
 
             // read text inside string literal
             case STATE_STRING:
@@ -1179,7 +1181,7 @@ int getToken(Token* token, Scanner* scanner)
                     strcpy(token->value.string, attr.data);
 
                     strFree(&attr);
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 if (c == '\\')
@@ -1192,7 +1194,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 STR_TRY(strAppend(&attr, c));
@@ -1237,7 +1239,7 @@ int getToken(Token* token, Scanner* scanner)
 
                 strFree(&attr);
                 token->type = TYPE_ERROR;
-                return 1;
+                return ERROR_LEXICAL;
 
             // read text inside multiline string
             case STATE_MULTILINE_STRING:
@@ -1245,7 +1247,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 if (c == '\n')
@@ -1269,7 +1271,7 @@ int getToken(Token* token, Scanner* scanner)
                                         attr.len + 1);
                             strcpy(token->value.string, attr.data);
                             strFree(&attr);
-                            return 0;
+                            return ERROR_SUCCESS;
                         }
 
                         STR_TRY(strAppend(&attr, '"'));
@@ -1295,7 +1297,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 // closing quote of interpolated string
@@ -1309,13 +1311,13 @@ int getToken(Token* token, Scanner* scanner)
                         ALLOC_TOKEN(token->value.string, char*, attr.len + 1);
                         strcpy(token->value.string, attr.data);
                         strFree(&attr);
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
                     // finish interpolated string
                     scanner->modeTop--;
                     token->type = TYPE_INTERP_END;
                     strFree(&attr);
-                    return 0;
+                    return ERROR_SUCCESS;
                 }
 
                 // interpolation entry or escaped dollar
@@ -1329,7 +1331,7 @@ int getToken(Token* token, Scanner* scanner)
                         ALLOC_TOKEN(token->value.string, char*, attr.len + 1);
                         strcpy(token->value.string, attr.data);
                         strFree(&attr);
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
 
                     int next = fgetc(scanner->stream);
@@ -1345,13 +1347,13 @@ int getToken(Token* token, Scanner* scanner)
                     if (next == '{')
                     {
                         strFree(&attr);
-                        if (pushMode(scanner, MODE_DEFAULT) != 0)
+                        if (pushMode(scanner, MODE_DEFAULT) != ERROR_SUCCESS)
                         {
                             token->type = TYPE_ERROR;
-                            return 99;
+                            return ERROR_INTERNAL;
                         }
                         token->type = TYPE_LEFT_BRACE;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
 
                     // embedded variable: $id
@@ -1365,7 +1367,7 @@ int getToken(Token* token, Scanner* scanner)
                     // invalid character after dollar
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 // escape sequence start
@@ -1380,7 +1382,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 STR_TRY(strAppend(&attr, c));
@@ -1412,7 +1414,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
                 state = STATE_INTERP_SINGLE;
                 break;
@@ -1437,14 +1439,14 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 token->type = TYPE_IDENTIFIER;
                 ALLOC_TOKEN(token->value.identifier, char*, attr.len + 1);
                 strcpy(token->value.identifier, attr.data);
                 strFree(&attr);
-                return 0;
+                return ERROR_SUCCESS;
 
             // read characters inside multiline interpolated string
             case STATE_INTERP_MULTI:
@@ -1457,7 +1459,7 @@ int getToken(Token* token, Scanner* scanner)
                 {
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 // newlines are part of multiline strings
@@ -1488,13 +1490,13 @@ int getToken(Token* token, Scanner* scanner)
                                             attr.len + 1);
                                 strcpy(token->value.string, attr.data);
                                 strFree(&attr);
-                                return 0;
+                                return ERROR_SUCCESS;
                             }
                             // finish multiline interpolated string
                             scanner->modeTop--;
                             token->type = TYPE_INTERP_END;
                             strFree(&attr);
-                            return 0;
+                            return ERROR_SUCCESS;
                         }
                         STR_TRY(strAppend(&attr, '"'));
                         STR_TRY(strAppend(&attr, '"'));
@@ -1516,7 +1518,7 @@ int getToken(Token* token, Scanner* scanner)
                         ALLOC_TOKEN(token->value.string, char*, attr.len + 1);
                         strcpy(token->value.string, attr.data);
                         strFree(&attr);
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
 
                     int next = fgetc(scanner->stream);
@@ -1530,13 +1532,13 @@ int getToken(Token* token, Scanner* scanner)
                     if (next == '{')
                     {
                         strFree(&attr);
-                        if (pushMode(scanner, MODE_DEFAULT) != 0)
+                        if (pushMode(scanner, MODE_DEFAULT) != ERROR_SUCCESS)
                         {
                             token->type = TYPE_ERROR;
-                            return 99;
+                            return ERROR_INTERNAL;
                         }
                         token->type = TYPE_LEFT_BRACE;
-                        return 0;
+                        return ERROR_SUCCESS;
                     }
 
                     if (isalpha(next) || next == '_')
@@ -1548,12 +1550,12 @@ int getToken(Token* token, Scanner* scanner)
 
                     strFree(&attr);
                     token->type = TYPE_ERROR;
-                    return 1;
+                    return ERROR_LEXICAL;
                 }
 
                 STR_TRY(strAppend(&attr, c));
                 break;
         }
     }
-    return 0;
+    return ERROR_SUCCESS;
 }
