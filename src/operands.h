@@ -21,7 +21,7 @@
  * @param code The code to print
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
-Errors tryPrint(const char* code);
+int tryPrint(const char* code);
 
 /**
  * @brief Prints bool@true or bool@false to the output
@@ -29,7 +29,7 @@ Errors tryPrint(const char* code);
  * @param boolValue true or false
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
-Errors writeLiteralBool(bool boolValue);
+int writeLiteralBool(bool boolValue);
 
 /**
  * @brief Prints int@ and the number to the output
@@ -37,14 +37,14 @@ Errors writeLiteralBool(bool boolValue);
  * @param intValue
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
-Errors writeLiteralInt(long long intValue);
+int writeLiteralInt(long long intValue);
 
 /**
  * @brief Prints nil@nil to the output
  *
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
-Errors writeLiteralNil(void);
+int writeLiteralNil(void);
 
 /**
  * @brief Prints float@ and number to the output
@@ -52,7 +52,7 @@ Errors writeLiteralNil(void);
  * @param floatValue
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
-Errors writeLiteralFloat(double floatValue);
+int writeLiteralFloat(double floatValue);
 
 /**
  * @brief Prints string@ and chars to the output
@@ -60,6 +60,6 @@ Errors writeLiteralFloat(double floatValue);
  * @param stringValue
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
-Errors writeLiteralString(const char* stringValue);
+int writeLiteralString(const char* stringValue);
 
 #endif
