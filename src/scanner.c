@@ -159,7 +159,6 @@ void scannerInit(Scanner* scanner, FILE* stream)
     scanner->pendingDedents = 0;
     scanner->atLineStart = true;
     scanner->parenLevel = 0;
-    scanner->lfSeen = false;
 
     scanner->modeStack[0] = MODE_DEFAULT;
     scanner->modeTop = 0;
@@ -196,9 +195,6 @@ int getToken(Token* token, Scanner* scanner)
 
     token->line = scanner->line;  // save line number for token
     bool hasNewLine = false;      // flag to track newline in comments
-    token->lfBefore =
-        scanner->lfSeen;      // save flag indicating preceding newline
-    scanner->lfSeen = false;  // reset newline flag for next token
 
     // emit pending dedent tokens first
     if (scanner->pendingDedents > 0)
@@ -265,39 +261,81 @@ int getToken(Token* token, Scanner* scanner)
             }
             else if (next == '*')
             {
-                int commentLevel = 1;
                 bool hasNewlineInside = false;
-                while (commentLevel > 0)
+                while (true)
                 {
-                    c = fgetc(scanner->stream);
-                    if (c == EOF)
+                    int commentLevel = 1;
+                    while (commentLevel > 0)
                     {
-                        token->type = TYPE_ERROR;
-                        return 1;
+                        c = fgetc(scanner->stream);
+                        if (c == EOF)
+                        {
+                            token->type = TYPE_ERROR;
+                            return 1;
+                        }
+                        if (c == '\n')
+                        {
+                            scanner->line++;
+                            hasNewlineInside = true;
+                        }
+                        else if (c == '/')
+                        {
+                            if ((next = fgetc(scanner->stream)) == '*')
+                                commentLevel++;
+                            else
+                                ungetc(next, scanner->stream);
+                        }
+                        else if (c == '*')
+                        {
+                            if ((next = fgetc(scanner->stream)) == '/')
+                                commentLevel--;
+                            else
+                                ungetc(next, scanner->stream);
+                        }
                     }
-                    if (c == '\n')
+
+                    // skip spaces and tabs after block comment
+                    while ((c = fgetc(scanner->stream)) == ' ' || c == '\t')
                     {
-                        scanner->line++;
-                        hasNewlineInside = true;
                     }
-                    else if (c == '/')
+
+                    // check for chained comments on the same line
+                    if (c == '/')
                     {
-                        if ((next = fgetc(scanner->stream)) == '*')
-                            commentLevel++;
+                        next = fgetc(scanner->stream);
+                        if (next == '/')
+                        {
+                            while ((c = fgetc(scanner->stream)) != '\n' &&
+                                   c != EOF)
+                            {
+                            }
+                            break;
+                        }
+                        else if (next == '*')
+                        {
+                            continue;
+                        }
                         else
+                        {
                             ungetc(next, scanner->stream);
+                        }
                     }
-                    else if (c == '*')
+                    break;
+                }
+
+                if (c == '\r')
+                {
+                    int crNext = fgetc(scanner->stream);
+                    if (crNext == '\n')
                     {
-                        if ((next = fgetc(scanner->stream)) == '/')
-                            commentLevel--;
-                        else
-                            ungetc(next, scanner->stream);
+                        c = '\n';
+                    }
+                    else
+                    {
+                        ungetc(crNext, scanner->stream);
                     }
                 }
-                while ((c = fgetc(scanner->stream)) == ' ')
-                {
-                }
+
                 if (hasNewlineInside && c != '\n' && c != EOF)
                 {
                     token->type = TYPE_ERROR;
@@ -399,7 +437,6 @@ int getToken(Token* token, Scanner* scanner)
                     scanner->line++;
                     if (scanner->parenLevel > 0)
                     {
-                        scanner->lfSeen = true;
                         continue;
                     }
                     token->line = scanner->line;
@@ -832,10 +869,6 @@ int getToken(Token* token, Scanner* scanner)
                                 token->type = TYPE_EOL;
                                 return 0;
                             }
-                            else
-                            {
-                                scanner->lfSeen = true;
-                            }
                             state = STATE_START;
                         }
                     }
@@ -854,7 +887,6 @@ int getToken(Token* token, Scanner* scanner)
                     scanner->line++;
                     if (scanner->parenLevel > 0)
                     {
-                        scanner->lfSeen = true;
                         state = STATE_START;
                         break;
                     }
