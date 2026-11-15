@@ -13,7 +13,7 @@
 #include <stdio.h>
 
 /** Helps to print code to the output */
-Errors tryPrint(const char* code)
+int tryPrint(const char* code)
 {
     if (code == NULL)  // Check for NULL
     {
@@ -29,7 +29,7 @@ Errors tryPrint(const char* code)
 }
 
 /** Prints bool@true or bool@false */
-Errors writeLiteralBool(bool boolValue)
+int writeLiteralBool(bool boolValue)
 {
     if (boolValue == true)
     {
@@ -42,7 +42,7 @@ Errors writeLiteralBool(bool boolValue)
 }
 
 /** Prints int value to stdout */
-Errors writeLiteralInt(long long intValue)
+int writeLiteralInt(long long intValue)
 {
     if (printf("int@%lld", intValue) < 0)
     {
@@ -53,13 +53,13 @@ Errors writeLiteralInt(long long intValue)
 }
 
 /** Prints nil (nothing) */
-Errors writeLiteralNil(void)
+int writeLiteralNil(void)
 {
     return tryPrint("nil@nil");
 }
 
 /** Prints float value */
-Errors writeLiteralFloat(double floatValue)
+int writeLiteralFloat(double floatValue)
 {
     if (printf("float@%a", floatValue) < 0)  // %a means in hex form
     {
@@ -70,7 +70,7 @@ Errors writeLiteralFloat(double floatValue)
 }
 
 /** Prints string@ and chars */
-Errors writeLiteralString(const char* stringValue)
+int writeLiteralString(const char* stringValue)
 {
     if (stringValue == NULL)
     {
