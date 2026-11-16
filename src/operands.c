@@ -163,3 +163,76 @@ int writeTempVar(size_t number)
 {
     return writeVarName("$tmp", number);
 }
+
+/** Gives us a text for jump labels */
+static const char* getJumpLabelText(jumpLabelType type)
+{
+    switch (type)
+    {
+        case LABEL_IF_ELSE:
+            return "if$else";
+
+        case LABEL_IF_END:
+            return "if$end";
+
+        case LABEL_WHILE_START:
+            return "while$start";
+
+        case LABEL_WHILE_END:
+            return "while$end";
+
+        case LABEL_AND_FALSE:
+            return "and$false";
+
+        case LABEL_AND_END:
+            return "and$end";
+
+        case LABEL_OR_TRUE:
+            return "or$true";
+
+        case LABEL_OR_END:
+            return "or$end";
+
+        case LABEL_FOR_CHECK:
+            return "for$check";
+
+        case LABEL_FOR_NEXT:
+            return "for$next";
+
+        case LABEL_FOR_END:
+            return "for$end";
+
+        default:  // not in the list
+            return NULL;
+    }
+}
+
+/** Prints a jump label to stdout */
+int writeJumpLabel(jumpLabelType type, size_t number)
+{
+    // words from getJumpLabelText, like while$start etc..
+    const char* labelText = getJumpLabelText(type);
+
+    if (labelText == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    // ? -> marks a jump
+    if (tryPrint("?") != ERROR_SUCCESS)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    if (tryPrint(labelText) != ERROR_SUCCESS)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    if (printf("$%zu", number) < 0)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    return ERROR_SUCCESS;
+}

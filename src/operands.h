@@ -17,6 +17,29 @@
 #include "error.h"
 
 /**
+ * @brief Types of labels we jump to
+ */
+typedef enum
+{
+    /* Base */
+    LABEL_IF_ELSE,     /**< Start of else, false if jumps here */
+    LABEL_IF_END,      /**< After the whole if, then part jumps here */
+    LABEL_WHILE_START, /**< Before the check, loop comes back here */
+    LABEL_WHILE_END,   /**< After the loop, false check jumps here */
+
+    /* Boolthen */
+    LABEL_AND_FALSE, /**< Left side of && was false, so result is false */
+    LABEL_AND_END,   /**< After &&, right side jumps here */
+    LABEL_OR_TRUE,   /**< Left side of || was true, so result is true */
+    LABEL_OR_END,    /**< After ||, right side jumps here */
+
+    /* Control */
+    LABEL_FOR_CHECK, /**< Before the check, for comes back here */
+    LABEL_FOR_NEXT,  /**< Go to the next number, failed guard jumps here */
+    LABEL_FOR_END    /**< After the loop, false check jumps here */
+} jumpLabelType;
+
+/**
  * @brief Prints a piece of code to the output
  *
  * @param code The code to print
@@ -87,5 +110,14 @@ int writeFuncLabel(const char* name);
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
 int writeTempVar(size_t number);
+
+/**
+ * @brief Prints a label we can jump to
+ *
+ * @param type
+ * @param number
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeJumpLabel(jumpLabelType type, size_t number);
 
 #endif
