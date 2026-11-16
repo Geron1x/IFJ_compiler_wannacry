@@ -157,3 +157,9 @@ int writeFuncLabel(const char* name)
 
     return ERROR_SUCCESS;
 }
+
+/** Prints a temporary variable name */
+int writeTempVar(size_t number)
+{
+    return writeVarName("$tmp", number);
+}
