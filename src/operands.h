@@ -12,6 +12,7 @@
 #define OPERANDS_H
 
 #include <stdbool.h>
+#include <stdio.h>
 
 #include "error.h"
 
@@ -61,5 +62,14 @@ int writeLiteralFloat(double floatValue);
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
 int writeLiteralString(const char* stringValue);
+
+/**
+ * @brief Prints a variable name
+ *
+ * @param name
+ * @param number
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeVarName(const char* name, size_t number);
 
 #endif
