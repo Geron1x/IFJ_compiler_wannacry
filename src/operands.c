@@ -134,3 +134,26 @@ int writeVarName(const char* name, size_t number)
 
     return ERROR_SUCCESS;
 }
+
+/** Prints label for function to stdout */
+int writeFuncLabel(const char* name)
+{
+    // just check before printing anything
+    if (name == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    // print $$ before the name, cause I don't want any matches with user
+    if (tryPrint("$$") != ERROR_SUCCESS)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    if (tryPrint(name) != ERROR_SUCCESS)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    return ERROR_SUCCESS;
+}
