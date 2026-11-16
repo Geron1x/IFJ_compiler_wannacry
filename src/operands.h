@@ -80,4 +80,12 @@ int writeVarName(const char* name, size_t number);
  */
 int writeFuncLabel(const char* name);
 
+/**
+ * @brief Prints name of temporary variable
+ *
+ * @param number
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeTempVar(size_t number);
+
 #endif
