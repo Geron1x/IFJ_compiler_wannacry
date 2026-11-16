@@ -214,7 +214,7 @@ int parseFunction(parcerContext* ctx)
     }
 
     // Otherwise the body is one expression on the same line
-    CHECK_ERR(parseExpression(ctx));
+    CHECK_ERR(parseExpression(ctx, NULL));
 
     // Nothing else may follow it on this line
     if (ctx->currentToken.type != TYPE_EOL &&
@@ -275,12 +275,12 @@ int parseStatement(parcerContext* ctx)
                 // Assignment: skip name and =, then read value
                 CHECK_ERR(advance(ctx));
                 CHECK_ERR(advance(ctx));
-                CHECK_ERR(parseExpression(ctx));
+                CHECK_ERR(parseExpression(ctx, NULL));
             }
             else
             {
                 // Function call or just a name
-                CHECK_ERR(parseExpression(ctx));
+                CHECK_ERR(parseExpression(ctx, NULL));
             }
             break;
         case TYPE_RETURN:
@@ -299,7 +299,7 @@ int parseStatement(parcerContext* ctx)
         case TYPE_TRUE:
         case TYPE_FALSE:
         case TYPE_LEFT_PAREN:
-            CHECK_ERR(parseExpression(ctx));
+            CHECK_ERR(parseExpression(ctx, NULL));
             break;
         // Line cannot start with an operator
         case TYPE_ADD:
@@ -333,7 +333,7 @@ int parseValue(parcerContext* ctx)
 
     // Value after = is required
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
-    CHECK_ERR(parseExpression(ctx));
+    CHECK_ERR(parseExpression(ctx, NULL));
 
     // Here the constant will be saved to AST later
     // CHECK_ERR(createNodeAST(valName, valType, valValue));
@@ -358,7 +358,7 @@ int parseVariable(parcerContext* ctx)
 
     // Value after = is required
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
-    CHECK_ERR(parseExpression(ctx));
+    CHECK_ERR(parseExpression(ctx, NULL));
 
     // Here the variable will be saved to AST later
     //     CHECK_ERR(createNodeAST(varName, varType, varValue));
@@ -375,7 +375,7 @@ int parseReturn(parcerContext* ctx)
     // Value is read only if the next token can start an expression
     if (canStartExpression(ctx->currentToken.type))
     {
-        CHECK_ERR(parseExpression(ctx));
+        CHECK_ERR(parseExpression(ctx, NULL));
     }
 
     return ERROR_SUCCESS;
@@ -386,7 +386,7 @@ int parseIf(parcerContext* ctx)
 {
     // Condition goes until then
     CHECK_ERR(advance(ctx));
-    CHECK_ERR(parseExpression(ctx));
+    CHECK_ERR(parseExpression(ctx, NULL));
     CHECK_ERR(match(ctx, TYPE_THEN));
     CHECK_ERR(parseBranch(ctx));
 
@@ -411,7 +411,7 @@ int parseWhile(parcerContext* ctx)
 {
     // Condition goes until do
     CHECK_ERR(advance(ctx));
-    CHECK_ERR(parseExpression(ctx));
+    CHECK_ERR(parseExpression(ctx, NULL));
     CHECK_ERR(match(ctx, TYPE_DO));
     return parseBranch(ctx);
 }
@@ -458,15 +458,17 @@ int parseStatementEnd(parcerContext* ctx)
 }
 
 // Call arguments: values in parentheses separated by commas
-int parseCallArgs(parcerContext* ctx)
+int parseCallArgs(parcerContext* ctx, astNode* call)
 {
     CHECK_ERR(match(ctx, TYPE_LEFT_PAREN));
 
     // Read arguments until the closing parenthesis
     while (ctx->currentToken.type != TYPE_RIGHT_PAREN)
     {
-        // Each argument moves forward or fails, so the loop always ends
-        CHECK_ERR(parseExpression(ctx));
+        // Each argument becomes a child of the call node
+        astNode* arg = NULL;
+        CHECK_ERR(parseExpression(ctx, &arg));
+        CHECK_ERR(appendChild(call, arg));
 
         // No comma means the list is over
         if (ctx->currentToken.type != TYPE_COMMA)
@@ -482,6 +484,14 @@ int parseCallArgs(parcerContext* ctx)
         }
     }
     return match(ctx, TYPE_RIGHT_PAREN);
+}
+
+// Append a child, if it fails free the child so nothing leaks
+int appendChild(astNode* parent, astNode* child)
+{
+    int err = astBlockAppend(parent, child);
+    if (err != ERROR_SUCCESS) astDestroy(child);
+    return err;
 }
 
 // Comma before ) is allowed only if ) is on a later line
