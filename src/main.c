@@ -7,14 +7,21 @@
 
 #include "ast.h"
 #include "parser.h"
+#include "semantics.h"
 
-int main()
+int main(void)
 {
     // Parse the program and get its tree
     astNode* tree = NULL;
     int err = parse(&tree);
 
-    // Free the tree, semantics and code generation will use it here later
+    // Check names and types only when the tree has no syntax errors
+    if (err == ERROR_SUCCESS)
+    {
+        err = semanticsCheck(tree);
+    }
+
+    // Free the tree, code generation will use it here later
     astDestroy(tree);
     return err;
 }
