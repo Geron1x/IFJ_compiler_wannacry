@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Parser regression tests
 # Usage: parser_tests/run.sh [-v]   (-v: valgrind)
-# Prefix: ok_ -> 0, e1_ -> 1, e2_ -> 2, xok_ -> 0 but not supported yet
+# Prefix: ok_ -> syntax is fine: 0 or a semantic code (3-7, 10), e1_ -> 1, e2_ -> 2
+#         xok_ -> syntax is fine by the spec but not supported yet
 set -u
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -31,10 +32,19 @@ make -s -C "$ROOT" >/dev/null || { echo "BUILD FAILED"; exit 1; }
 # Expected code from file prefix
 expected_code() {
     case "$1" in
-        ok_*|xok_*) echo 0 ;;
+        ok_*|xok_*) echo "0/3-7/10" ;;
         e1_*)       echo 1 ;;
         e2_*)       echo 2 ;;
         *)          echo -1 ;;
+    esac
+}
+
+# Codes without a syntax error: success or a semantic error
+# ok_ tests check syntax only, so they may use undefined names
+syntax_ok() {
+    case "$1" in
+        0|3|4|5|6|7|10) return 0 ;;
+        *)              return 1 ;;
     esac
 }
 
@@ -53,7 +63,7 @@ for f in "$DIR"/cases/*.ifj; do
 
     # Known-unsupported tests
     if [[ "$name" == xok_* ]]; then
-        if [ "$got" -eq 0 ]; then
+        if syntax_ok "$got"; then
             echo "XPASS $name (rename to ok_)"; xpass=$((xpass+1))
         else
             xfail=$((xfail+1))
@@ -61,8 +71,13 @@ for f in "$DIR"/cases/*.ifj; do
         continue
     fi
 
-    # Compare exit code
-    if [ "$got" -ne "$exp" ]; then
+    # ok_ accepts any code without a syntax error, others need the exact code
+    if [[ "$name" == ok_* ]]; then
+        syntax_ok "$got" && good=1 || good=0
+    else
+        [ "$got" -eq "$exp" ] && good=1 || good=0
+    fi
+    if [ "$good" -eq 0 ]; then
         [ "$got" -eq 124 ] && got="TIMEOUT"
         echo "FAIL  $name: expected $exp, got $got"; fail=$((fail+1)); continue
     fi
@@ -73,8 +88,8 @@ for f in "$DIR"/cases/*.ifj; do
             --errors-for-leak-kinds=definite,indirect \
             --error-exitcode=$VG_ERR "$BIN" < "$f" >/dev/null 2>&1
         vg=$?
-        # Valgrind must return the program's own code
-        if [ "$vg" -ne "$exp" ]; then
+        # Valgrind must return the same code as the plain run
+        if [ "$vg" -ne "$got" ]; then
             case "$vg" in
                 "$VG_ERR") msg="LEAK/memory error" ;;
                 124)       msg="valgrind TIMEOUT" ;;
