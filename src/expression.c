@@ -58,6 +58,8 @@ typedef struct
 {
     ItemKind kind;
     PrecSymbol sym;  // token group, used only for ITEM_TERM
+    Type tokenType;  // exact token, tells which operator it is
+    astNode* node;   // tree of an operand or folded expression, else NULL
 } StackItem;
 
 // Stack that grows when it is full
@@ -69,7 +71,7 @@ typedef struct
 } PrecStack;
 
 // Push an item, double the size if needed, 99 if no memory
-static int precStackPush(PrecStack* stack, ItemKind kind, PrecSymbol sym)
+static int precStackPush(PrecStack* stack, StackItem item)
 {
     if (stack->count == stack->capacity)
     {
@@ -84,8 +86,7 @@ static int precStackPush(PrecStack* stack, ItemKind kind, PrecSymbol sym)
         stack->items = grown;
         stack->capacity = newCap;
     }
-    stack->items[stack->count].kind = kind;
-    stack->items[stack->count].sym = sym;
+    stack->items[stack->count] = item;
     stack->count++;
     return ERROR_SUCCESS;
 }
@@ -108,10 +109,11 @@ static int precStackInsertHandle(PrecStack* stack)
     size_t pos = precStackTopTerm(stack) + 1;
 
     // Make room for one more item, then shift the rest up
-    CHECK_ERR(precStackPush(stack, ITEM_HANDLE, PS_END));
+    CHECK_ERR(precStackPush(stack, (StackItem){.kind = ITEM_HANDLE}));
     memmove(&stack->items[pos + 1], &stack->items[pos],
             (stack->count - 1 - pos) * sizeof(StackItem));
-    stack->items[pos].kind = ITEM_HANDLE;
+    // The mark is written whole, otherwise it keeps a copy of a moved node
+    stack->items[pos] = (StackItem){.kind = ITEM_HANDLE};
     return ERROR_SUCCESS;
 }
 
@@ -152,6 +154,110 @@ static bool precMatchRule(const StackItem* rhs, size_t len)
     return binary || parens;
 }
 
+// Logical operators are not in ast.h yet, so the tree cannot hold them
+static int precNoLogicalOp(const char* name)
+{
+    fprintf(stderr, "Internal err: operator %s is not supported in AST yet\n",
+            name);
+    return ERROR_INTERNAL;
+}
+
+// Operator of a binary node from its token
+static int precBinaryOp(Type type, astOpType* op)
+{
+    switch (type)
+    {
+        case TYPE_MUL:
+            *op = AST_OP_MUL;
+            break;
+        case TYPE_DIV:
+            *op = AST_OP_DIV;
+            break;
+        case TYPE_ADD:
+            *op = AST_OP_ADD;
+            break;
+        case TYPE_SUB:
+            *op = AST_OP_SUB;
+            break;
+        case TYPE_LESSER:
+            *op = AST_OP_L;
+            break;
+        case TYPE_LESSER_EQUAL:
+            *op = AST_OP_LEQ;
+            break;
+        case TYPE_BIGGER:
+            *op = AST_OP_G;
+            break;
+        case TYPE_BIGGER_EQUAL:
+            *op = AST_OP_GEQ;
+            break;
+        case TYPE_EQUAL:
+            *op = AST_OP_EQ;
+            break;
+        case TYPE_NOT_EQUAL:
+            *op = AST_OP_NEQ;
+            break;
+        case TYPE_AND:
+            return precNoLogicalOp("&&");
+        case TYPE_OR:
+            return precNoLogicalOp("||");
+        default:
+            return ERROR_INTERNAL;
+    }
+    return ERROR_SUCCESS;
+}
+
+// Operator of a unary node from its token
+static int precUnaryOp(Type type, astOpType* op)
+{
+    switch (type)
+    {
+        case TYPE_ADD:
+            *op = AST_OP_POS;
+            break;
+        case TYPE_SUB:
+            *op = AST_OP_NEG;
+            break;
+        case TYPE_EXCLAMATION:
+            return precNoLogicalOp("!");
+        default:
+            return ERROR_INTERNAL;
+    }
+    return ERROR_SUCCESS;
+}
+
+// Build the node for the items after the mark, the rule is already checked
+// Items give their nodes away only on success
+static int precBuildNode(StackItem* rhs, size_t len, astNode** out)
+{
+    // One operand or expression in parentheses keeps its node
+    if (len == 1 || (rhs[0].kind == ITEM_TERM && rhs[0].sym == PS_LPAREN))
+    {
+        size_t i = (len == 1) ? 0 : 1;
+        *out = rhs[i].node;
+        rhs[i].node = NULL;
+        return ERROR_SUCCESS;
+    }
+
+    // Unary operator before an expression
+    if (len == 2)
+    {
+        astOpType op;
+        CHECK_ERR(precUnaryOp(rhs[0].tokenType, &op));
+        CHECK_ERR(astCreateUnary(op, rhs[1].node, out));
+        rhs[1].node = NULL;
+        return ERROR_SUCCESS;
+    }
+
+    // Two expressions with an operator between them
+    astOpType op;
+    CHECK_ERR(precBinaryOp(rhs[1].tokenType, &op));
+    CHECK_ERR(astCreateBinary(op, rhs[0].node, rhs[2].node, out));
+    rhs[0].node = NULL;
+    rhs[2].node = NULL;
+    return ERROR_SUCCESS;
+}
+
 // Fold everything after the last mark into one expression
 static int precReduce(PrecStack* stack, int line)
 {
@@ -165,11 +271,17 @@ static int precReduce(PrecStack* stack, int line)
         return ERROR_SYNTAX;
     }
 
-    // Here an AST node will be created later
+    // Build the node, on failure the items still own their nodes
+    astNode* node = NULL;
+    CHECK_ERR(precBuildNode(&stack->items[h], stack->count - h, &node));
 
     // Remove the mark with its items and push one expression
     stack->count = h - 1;
-    return precStackPush(stack, ITEM_EXPR, PS_END);
+    int err =
+        precStackPush(stack, (StackItem){.kind = ITEM_EXPR, .node = node});
+    // Node that did not get onto the stack is freed here
+    if (err != ERROR_SUCCESS) astDestroy(node);
+    return err;
 }
 
 // Find the group of the current token, for ( the caller must peek first
@@ -226,36 +338,67 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
     }
 }
 
-// Read one operand: literal, name, call or ()
-static int precConsumeOperand(parcerContext* ctx)
+// Build a literal node from the token
+static int precCreateLiteral(const Token* tok, astNode** out)
 {
-    // Empty parentheses are two tokens
+    switch (tok->type)
+    {
+        // Token keeps long long, the tree keeps int, spec needs no range check
+        case TYPE_INT_LITERAL:
+            return astCreateLiteralInt((int)tok->value.numberInt, out);
+        case TYPE_DOUBLE_LITERAL:
+            return astCreateLiteralDouble(tok->value.numberFloat, out);
+        case TYPE_STRING_LITERAL:
+            return astCreateLiteralString(tok->value.string, out);
+        case TYPE_TRUE:
+            return astCreateLiteralBool(true, out);
+        case TYPE_FALSE:
+            return astCreateLiteralBool(false, out);
+        default:
+            return ERROR_INTERNAL;
+    }
+}
+
+// Read one operand and build its node: literal, name, call or ()
+static int precConsumeOperand(parcerContext* ctx, astNode** out)
+{
+    // Empty parentheses are two tokens and mean the Unit value
     if (ctx->currentToken.type == TYPE_LEFT_PAREN)
     {
+        CHECK_ERR(astCreateLiteralUnit(out));
         CHECK_ERR(advance(ctx));
         return advance(ctx);
     }
 
-    // Name followed by ( is a call, arguments are read recursively
+    // Name with ( is a call, make the node before advance frees the name
     if (ctx->currentToken.type == TYPE_IDENTIFIER)
     {
-        CHECK_ERR(advance(ctx));
-        if (ctx->currentToken.type == TYPE_LEFT_PAREN)
+        CHECK_ERR(peek(ctx));
+        if (ctx->peekToken.type == TYPE_LEFT_PAREN)
         {
-            return parseCallArgs(ctx);
+            CHECK_ERR(astCreateCall(ctx->currentToken.value.identifier, out));
+            CHECK_ERR(advance(ctx));
+            return parseCallArgs(ctx, *out);
         }
-        return ERROR_SUCCESS;
+        CHECK_ERR(astCreateVarExpr(ctx->currentToken.value.identifier, out));
+        return advance(ctx);
     }
 
     // Literal is one token
+    CHECK_ERR(precCreateLiteral(&ctx->currentToken, out));
     return advance(ctx);
 }
 
-// Push the token group to the stack and read its tokens
+// Push the token group, an operand gets its node right on the stack
 static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol in)
 {
-    CHECK_ERR(precStackPush(stack, ITEM_TERM, in));
-    if (in == PS_OPERAND) return precConsumeOperand(ctx);
+    StackItem item = {
+        .kind = ITEM_TERM, .sym = in, .tokenType = ctx->currentToken.type};
+    CHECK_ERR(precStackPush(stack, item));
+    if (in == PS_OPERAND)
+    {
+        return precConsumeOperand(ctx, &stack->items[stack->count - 1].node);
+    }
     return advance(ctx);
 }
 
@@ -267,7 +410,8 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
     // At the start we wait for an operand
     bool expectOperand = true;
     // Bottom of the stack
-    CHECK_ERR(precStackPush(stack, ITEM_TERM, PS_END));
+    CHECK_ERR(
+        precStackPush(stack, (StackItem){.kind = ITEM_TERM, .sym = PS_END}));
 
     while (1)
     {
@@ -317,12 +461,30 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
     }
 }
 
-// Parse one expression, the stack is freed here on every exit
-int parseExpression(parcerContext* ctx)
+// Parse one expression and give its tree to the caller
+// The stack and every node left on it are freed here on every exit
+int parseExpression(parcerContext* ctx, astNode** out)
 {
     PrecStack stack = {.items = NULL, .count = 0, .capacity = 0};
     int err = precParse(ctx, &stack);
+
+    // On success the only expression lies right above the bottom
+    astNode* result = NULL;
+    if (err == ERROR_SUCCESS)
+    {
+        result = stack.items[1].node;
+        stack.items[1].node = NULL;
+    }
+
+    // Free nodes that stayed on the stack after an error
+    for (size_t i = 0; i < stack.count; i++) astDestroy(stack.items[i].node);
     free(stack.items);
+
+    // Caller without a place for the tree does not need it
+    if (out == NULL)
+        astDestroy(result);
+    else
+        *out = result;
     return err;
 }
 

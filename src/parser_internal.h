@@ -13,6 +13,7 @@
 
 #include <stdbool.h>
 
+#include "ast.h"
 #include "error.h"
 #include "scanner.h"
 
@@ -72,8 +73,18 @@ int match(parcerContext* ctx, Type expectedType);
  * @brief Parses call arguments: values in parentheses separated by commas.
  *
  * @param ctx Parser state, current token is the opening parenthesis.
+ * @param call Call node, every argument is appended to it as a child.
  * @return ERROR_SUCCESS, ERROR_LEXICAL, ERROR_SYNTAX or ERROR_INTERNAL.
  */
-int parseCallArgs(parcerContext* ctx);
+int parseCallArgs(parcerContext* ctx, astNode* call);
+
+/**
+ * @brief Appends a child to a node, frees the child if appending fails.
+ *
+ * @param parent Node that receives the child.
+ * @param child Node to append, owned by the parent on success.
+ * @return ERROR_SUCCESS or ERROR_INTERNAL.
+ */
+int appendChild(astNode* parent, astNode* child);
 
 #endif
