@@ -72,4 +72,12 @@ int writeLiteralString(const char* stringValue);
  */
 int writeVarName(const char* name, size_t number);
 
+/**
+ * @brief Prints function label
+ *
+ * @param name
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeFuncLabel(const char* name);
+
 #endif
