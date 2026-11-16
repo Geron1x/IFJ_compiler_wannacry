@@ -13,6 +13,16 @@
 
 // Functions used only inside this file
 
+// Parameter nodes kept until the function node exists
+typedef struct
+{
+    astNode** items;
+    size_t count;
+    size_t capacity;
+} ParamList;
+
+#define PARAM_LIST_INIT_CAPACITY 4
+
 // Work with tokens
 void freeTokenValue(Token* token);
 int matchDataType(parcerContext* ctx, dataType* type);
@@ -20,9 +30,20 @@ int takeName(parcerContext* ctx, char** name);
 int checkTrailingComma(parcerContext* ctx, int commaLine);
 
 // Program, prologue and functions
-int parseProgram(parcerContext* ctx);
+int parseProgram(parcerContext* ctx, astNode* prog);
 int parsePrologue(parcerContext* ctx);
-int parseFunction(parcerContext* ctx);
+int addFunction(parcerContext* ctx, astNode* prog, bool isMain);
+int parseFunction(parcerContext* ctx, bool isMain, astNode** out);
+int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
+                       astNode** body);
+int parseParams(parcerContext* ctx, ParamList* params);
+int parseParam(parcerContext* ctx, ParamList* params);
+int parseFunctionBody(parcerContext* ctx, astNode** out);
+int buildFunction(const char* name, dataType retType, bool isMain,
+                  astNode* body, ParamList* params, astNode** out);
+int paramListPush(ParamList* list, astNode* param);
+void paramListFree(ParamList* list);
+int wrapInBlock(astNode* node, astNode** out);
 
 // Statements inside function body
 int parseBlock(parcerContext* ctx, astNode** out);
@@ -66,7 +87,7 @@ int parse(astNode** out)
                          .prevType = TYPE_ERROR};
 
     // Parse the whole program
-    int err = parseProgram(&ctx);
+    int err = parseProgram(&ctx, prog);
 
     // Free tokens in one place for success and error
     freeTokenValue(&ctx.currentToken);
@@ -96,8 +117,8 @@ int parse(astNode** out)
 // Program structure
 // ============================================================
 
-// Program is prologue and then functions
-int parseProgram(parcerContext* ctx)
+// Program is prologue and then functions, each function is added to prog
+int parseProgram(parcerContext* ctx, astNode* prog)
 {
     // Read the first token
     CHECK_ERR(advance(ctx));
@@ -124,12 +145,12 @@ int parseProgram(parcerContext* ctx)
         {
             CHECK_ERR(advance(ctx));
             if (ctx->currentToken.type == TYPE_EOL) CHECK_ERR(advance(ctx));
-            CHECK_ERR(parseFunction(ctx));
+            CHECK_ERR(addFunction(ctx, prog, true));
         }
         // Ordinary function starts with def
         else if (ctx->currentToken.type == TYPE_DEF)
         {
-            CHECK_ERR(parseFunction(ctx));
+            CHECK_ERR(addFunction(ctx, prog, false));
         }
         // Nothing else is allowed here
         else
@@ -169,74 +190,221 @@ int parsePrologue(parcerContext* ctx)
     return match(ctx, TYPE_EOL);
 }
 
-// Function: def, name, parameters, return type, =, body
-int parseFunction(parcerContext* ctx)
+// Parse one function and add it to the program
+int addFunction(parcerContext* ctx, astNode* prog, bool isMain)
 {
+    astNode* func = NULL;
+    CHECK_ERR(parseFunction(ctx, isMain, &func));
+    return appendChild(prog, func);
+}
+
+// Function: def, name, parameters, return type, =, body
+int parseFunction(parcerContext* ctx, bool isMain, astNode** out)
+{
+    // Take the name, it must be freed on every return below
     CHECK_ERR(match(ctx, TYPE_DEF));
-    CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
-    CHECK_ERR(match(ctx, TYPE_LEFT_PAREN));
+    char* name = NULL;
+    CHECK_ERR(takeName(ctx, &name));
 
-    // Parameters exist if the parenthesis is not closed right away
-    if (ctx->currentToken.type != TYPE_RIGHT_PAREN)
+    // Without a written return type the semantics finds it out
+    ParamList params = {.items = NULL, .count = 0, .capacity = 0};
+    dataType retType = S_TYPE_UNKNOWN;
+    astNode* body = NULL;
+    int err = parseFunctionParts(ctx, &params, &retType, &body);
+
+    // Function node takes the body and the parameters
+    if (err == ERROR_SUCCESS)
     {
-        // First parameter: name and type
-        CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
-        CHECK_ERR(match(ctx, TYPE_DOUBLE_DOT));
-        CHECK_ERR(matchDataType(ctx, NULL));
-
-        // Each comma brings one more parameter
-        while (ctx->currentToken.type == TYPE_COMMA)
-        {
-            int commaLine = ctx->currentToken.line;
-            CHECK_ERR(advance(ctx));
-
-            // Comma before ) only with new line
-            if (ctx->currentToken.type == TYPE_RIGHT_PAREN)
-            {
-                CHECK_ERR(checkTrailingComma(ctx, commaLine));
-                break;
-            }
-            CHECK_ERR(match(ctx, TYPE_IDENTIFIER));
-            CHECK_ERR(match(ctx, TYPE_DOUBLE_DOT));
-            CHECK_ERR(matchDataType(ctx, NULL));
-        }
+        err = buildFunction(name, retType, isMain, body, &params, out);
     }
 
+    // Parameters not given to the function are freed here
+    paramListFree(&params);
+    free(name);
+    return err;
+}
+
+// Parameters in parentheses, optional return type, = and the body
+int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
+                       astNode** body)
+{
+    CHECK_ERR(match(ctx, TYPE_LEFT_PAREN));
+    CHECK_ERR(parseParams(ctx, params));
     CHECK_ERR(match(ctx, TYPE_RIGHT_PAREN));
 
     // Return type is optional
     if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
         CHECK_ERR(advance(ctx));
-        CHECK_ERR(matchDataType(ctx, NULL));
+        CHECK_ERR(matchDataType(ctx, retType));
     }
 
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
+    return parseFunctionBody(ctx, body);
+}
 
+// Parameters separated by commas, comma before ) only with new line
+int parseParams(parcerContext* ctx, ParamList* params)
+{
+    // Parameters exist if the parenthesis is not closed right away
+    if (ctx->currentToken.type == TYPE_RIGHT_PAREN)
+    {
+        return ERROR_SUCCESS;
+    }
+    CHECK_ERR(parseParam(ctx, params));
+
+    // Each comma brings one more parameter
+    while (ctx->currentToken.type == TYPE_COMMA)
+    {
+        int commaLine = ctx->currentToken.line;
+        CHECK_ERR(advance(ctx));
+
+        // Comma before ) only with new line
+        if (ctx->currentToken.type == TYPE_RIGHT_PAREN)
+        {
+            return checkTrailingComma(ctx, commaLine);
+        }
+        CHECK_ERR(parseParam(ctx, params));
+    }
+    return ERROR_SUCCESS;
+}
+
+// One parameter: name, colon, type, kept in the list as a constant
+int parseParam(parcerContext* ctx, ParamList* params)
+{
+    // Take the name, it must be freed on every return below
+    char* name = NULL;
+    CHECK_ERR(takeName(ctx, &name));
+
+    dataType type = S_TYPE_UNKNOWN;
+    int err = match(ctx, TYPE_DOUBLE_DOT);
+    if (err == ERROR_SUCCESS) err = matchDataType(ctx, &type);
+
+    // Parameter is a constant without a value
+    astNode* param = NULL;
+    if (err == ERROR_SUCCESS)
+    {
+        err = astCreateVarDef(name, type, true, NULL, &param);
+    }
+    if (err == ERROR_SUCCESS) err = paramListPush(params, param);
+
+    free(name);
+    return err;
+}
+
+// Body after =: indented block, or one expression on the same line
+int parseFunctionBody(parcerContext* ctx, astNode** out)
+{
     // New line after = means a block body
     if (ctx->currentToken.type == TYPE_EOL)
     {
         CHECK_ERR(advance(ctx));
-        astNode* body = NULL;
-        CHECK_ERR(parseBlock(ctx, &body));
-        // Function node does not exist yet, so the body is freed for now
-        astDestroy(body);
-        return ERROR_SUCCESS;
+        return parseBlock(ctx, out);
     }
 
     // Otherwise the body is one expression on the same line
-    CHECK_ERR(parseExpression(ctx, NULL));
+    astNode* expr = NULL;
+    CHECK_ERR(parseExpression(ctx, &expr));
 
     // Nothing else may follow it on this line
     if (ctx->currentToken.type != TYPE_EOL &&
         ctx->currentToken.type != TYPE_EOF)
     {
+        astDestroy(expr);
         fprintf(stderr,
                 "Syntax error in line %d: expected end of line after function "
                 "body\n",
                 ctx->currentToken.line);
         return ERROR_SYNTAX;
     }
+
+    // One line body is a block with one element
+    return wrapInBlock(expr, out);
+}
+
+// Make the function node, then give it the parameters one by one
+int buildFunction(const char* name, dataType retType, bool isMain,
+                  astNode* body, ParamList* params, astNode** out)
+{
+    // On failure the body still belongs to us
+    astNode* func = NULL;
+    int err = astCreateFuncDef(name, retType, body, &func, isMain);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(body);
+        return err;
+    }
+
+    // Given parameter is removed from the list, the function owns it now
+    for (size_t i = 0; i < params->count; i++)
+    {
+        err = astBlockAppend(func, params->items[i]);
+        if (err != ERROR_SUCCESS)
+        {
+            astDestroy(func);
+            return err;
+        }
+        params->items[i] = NULL;
+    }
+    *out = func;
+    return ERROR_SUCCESS;
+}
+
+// ============================================================
+// Helpers for building the tree
+// ============================================================
+
+// Add a parameter, double the size if needed, free it if no memory
+int paramListPush(ParamList* list, astNode* param)
+{
+    if (list->count == list->capacity)
+    {
+        size_t newCap = (list->capacity == 0) ? PARAM_LIST_INIT_CAPACITY
+                                              : list->capacity * 2;
+        astNode** grown = realloc(list->items, newCap * sizeof(astNode*));
+        if (grown == NULL)
+        {
+            fprintf(stderr, "Internal err: out of memory\n");
+            astDestroy(param);
+            return ERROR_INTERNAL;
+        }
+        list->items = grown;
+        list->capacity = newCap;
+    }
+    list->items[list->count] = param;
+    list->count++;
+    return ERROR_SUCCESS;
+}
+
+// Free parameters that are still in the list and the list itself
+void paramListFree(ParamList* list)
+{
+    for (size_t i = 0; i < list->count; i++) astDestroy(list->items[i]);
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+    list->capacity = 0;
+}
+
+// Put one node into a new block, the node is freed if it fails
+int wrapInBlock(astNode* node, astNode** out)
+{
+    astNode* block = NULL;
+    int err = astCreateBlock(&block);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(node);
+        return err;
+    }
+
+    // appendChild frees the node itself when it fails
+    err = appendChild(block, node);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(block);
+        return err;
+    }
+    *out = block;
     return ERROR_SUCCESS;
 }
 
@@ -485,24 +653,7 @@ int parseElseIf(parcerContext* ctx, astNode** out)
 {
     astNode* inner = NULL;
     CHECK_ERR(parseIf(ctx, &inner));
-
-    astNode* block = NULL;
-    int err = astCreateBlock(&block);
-    if (err != ERROR_SUCCESS)
-    {
-        astDestroy(inner);
-        return err;
-    }
-
-    // appendChild frees the inner if itself when it fails
-    err = appendChild(block, inner);
-    if (err != ERROR_SUCCESS)
-    {
-        astDestroy(block);
-        return err;
-    }
-    *out = block;
-    return ERROR_SUCCESS;
+    return wrapInBlock(inner, out);
 }
 
 // while, condition, do, body
