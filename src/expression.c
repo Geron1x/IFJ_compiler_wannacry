@@ -462,7 +462,7 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
 }
 
 // Parse one expression and give its tree to the caller
-// The stack and every node left on it are freed here on every exit
+// The stack and every node left on it are freed here on every return
 int parseExpression(parcerContext* ctx, astNode** out)
 {
     PrecStack stack = {.items = NULL, .count = 0, .capacity = 0};
