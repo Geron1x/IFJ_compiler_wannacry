@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "expression.h"
+#include "parser_debug.h"
 #include "parser_internal.h"
 
 // Functions used only inside this file
@@ -73,6 +74,11 @@ int parse(astNode** out)
 
     // Message for testing only
     fprintf(stderr, "Syntax analysis finished succesfully (code 0).\n");
+
+    // Print the tree only in a build with -DAST_DEBUG
+#ifdef AST_DEBUG
+    astDump(prog, 0);
+#endif
 
     // Give the finished tree to the caller
     *out = prog;
