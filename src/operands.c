@@ -107,3 +107,30 @@ int writeLiteralString(const char* stringValue)
 
     return ERROR_SUCCESS;
 }
+
+/** Prints a variable name to stdout */
+int writeVarName(const char* name, size_t number)
+{
+    if (name == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    if (tryPrint("LF@") != ERROR_SUCCESS)  // Prints LF@
+    {
+        return ERROR_INTERNAL;
+    }
+
+    if (tryPrint(name) != ERROR_SUCCESS)  // Prints var name
+    {
+        return ERROR_INTERNAL;
+    }
+
+    // Prints $ and num, so var will never repeat
+    if (printf("$%zu", number) < 0)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    return ERROR_SUCCESS;
+}
