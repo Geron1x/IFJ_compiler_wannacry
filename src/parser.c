@@ -38,9 +38,17 @@ int parseStatementEnd(parcerContext* ctx);
 // Entry point of the parser
 // ============================================================
 
-// Check syntax of the program from stdin and return error code
-int parse(void)
+// Check the program from stdin, build its tree and return error code
+int parse(astNode** out)
 {
+    // Caller gets nothing until the whole program is parsed
+    if (out == NULL) return ERROR_INTERNAL;
+    *out = NULL;
+
+    // Create the root node of the program tree
+    astNode* prog = NULL;
+    CHECK_ERR(astCreateProgram(&prog));
+
     // Prepare scanner and parser state
     Scanner scanner;
     scannerInit(&scanner, stdin);
@@ -56,11 +64,18 @@ int parse(void)
     freeTokenValue(&ctx.currentToken);
     if (ctx.hasPeek) freeTokenValue(&ctx.peekToken);
 
-    // Message for testing only
-    if (err == ERROR_SUCCESS)
+    // On error free the partial tree
+    if (err != ERROR_SUCCESS)
     {
-        fprintf(stderr, "Syntax analysis finished succesfully (code 0).\n");
+        astDestroy(prog);
+        return err;
     }
+
+    // Message for testing only
+    fprintf(stderr, "Syntax analysis finished succesfully (code 0).\n");
+
+    // Give the finished tree to the caller
+    *out = prog;
     return err;
 }
 

@@ -5,11 +5,16 @@
 
 #include <stdio.h>
 
+#include "ast.h"
 #include "parser.h"
 
 int main()
 {
+    // Parse the program and get its tree
+    astNode* tree = NULL;
+    int err = parse(&tree);
 
-    int err = parse();
+    // Free the tree, semantics and code generation will use it here later
+    astDestroy(tree);
     return err;
 }

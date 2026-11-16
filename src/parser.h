@@ -11,13 +11,15 @@
 #ifndef PARSER_H
 #define PARSER_H
 
+#include "ast.h"
 
 /**
- * @brief Checks syntax of the IFJ26 program read from stdin.
+ * @brief Parses the IFJ26 program read from stdin and builds its AST.
  *
+ * @param out Receives the program tree on success, NULL on error.
  * @return ERROR_SUCCESS, ERROR_LEXICAL, ERROR_SYNTAX or ERROR_INTERNAL.
  */
-int parse(void);
+int parse(astNode** out);
 
 
 #endif
