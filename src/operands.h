@@ -17,6 +17,19 @@
 #include "error.h"
 
 /**
+ * @brief Leaves the function with the error if the call failed
+ */
+#define RETURN_IF_ERROR(call)             \
+    do                                    \
+    {                                     \
+        int macroResult = (call);         \
+        if (macroResult != ERROR_SUCCESS) \
+        {                                 \
+            return macroResult;           \
+        }                                 \
+    } while (0)
+
+/**
  * @brief Types of labels we jump to
  */
 typedef enum
