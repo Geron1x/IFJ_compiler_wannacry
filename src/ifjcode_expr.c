@@ -140,6 +140,24 @@ static int pushOperation(const astNode* binary)
     return tryPrint(translateOperator(binary->data.opType, binary->retType));
 }
 
+/** Pushes all arguments and calls the function */
+static int pushCall(const astNode* call)
+{
+    size_t argumentCount = (size_t)call->childCount;
+
+    // put every argument on stack, from left to right
+    for (size_t i = 0; i < argumentCount; i++)
+    {
+        RETURN_IF_ERROR(pushExpression(call->children[i]));
+    }
+
+    RETURN_IF_ERROR(tryPrint("CALL "));
+    RETURN_IF_ERROR(writeFuncLabel(call->data.funcData.key));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Pushes value of the expression on the stack */
 int pushExpression(const astNode* expression)
 {
@@ -152,6 +170,10 @@ int pushExpression(const astNode* expression)
 
         case AST_EXPR_BINARY:
             RETURN_IF_ERROR(pushOperation(expression));
+            break;
+
+        case AST_EXPR_CALL:
+            RETURN_IF_ERROR(pushCall(expression));
             break;
 
         default:
