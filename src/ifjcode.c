@@ -58,6 +58,16 @@ static int writeProgramStart(const astNode* mainNode)
     return ERROR_SUCCESS;
 }
 
+/** Prints DEFVAR for temp variable */
+static int defineTempVar(size_t number)
+{
+    RETURN_IF_ERROR(tryPrint("DEFVAR "));
+    RETURN_IF_ERROR(writeTempVar(number));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Prints function */
 static int generateFunction(const astNode* function)
 {
@@ -72,6 +82,11 @@ static int generateFunction(const astNode* function)
     RETURN_IF_ERROR(tryPrint("\n"));
     RETURN_IF_ERROR(tryPrint("CREATEFRAME\n"));
     RETURN_IF_ERROR(tryPrint("PUSHFRAME\n"));
+
+    // temp variables
+    RETURN_IF_ERROR(defineTempVar(1));
+    RETURN_IF_ERROR(defineTempVar(2));
+
     // todo, body of the func
     RETURN_IF_ERROR(tryPrint("POPFRAME\n"));
     RETURN_IF_ERROR(tryPrint("RETURN\n"));
