@@ -53,7 +53,11 @@ typedef enum astoptype
     AST_OP_GEQ,
 
     AST_OP_NEG,
-    AST_OP_POS
+    AST_OP_POS,
+
+    AST_OP_NOT,
+    AST_OP_AND,
+    AST_OP_OR
 } astOpType;
 
 /**
