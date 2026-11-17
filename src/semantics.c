@@ -865,6 +865,18 @@ static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
                 return S_TYPE_UNKNOWN;
             }
             break;
+        case AST_OP_AND:
+        case AST_OP_OR:
+            if (typeLeft == S_TYPE_BOOL)
+            {
+                typeLeft = S_TYPE_BOOL;
+            }
+            else
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+            break;
         default:
             *err = ERROR_INTERNAL;
             return S_TYPE_UNKNOWN;
@@ -1007,7 +1019,16 @@ static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
         uNode->retType = type;
         return type;
     }
-
+    if (uNode->data.opType == AST_OP_NOT)
+    {
+        if (type == S_TYPE_BOOL)
+        {
+            uNode->retType = S_TYPE_BOOL;
+            return S_TYPE_BOOL;
+        }
+        *err = ERROR_TYPE_MISMATCH;
+        return S_TYPE_UNKNOWN;
+    }
     *err = ERROR_TYPE_MISMATCH;
     return S_TYPE_UNKNOWN;
 }

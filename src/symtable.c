@@ -179,6 +179,11 @@ Errors symtableBaseFuncInit(symtable* funcTable)
         status = symtableInsertFunc(funcTable, "chr", S_TYPE_STRING, 1,
                                     paramsChr, NULL);
     }
+    if (status == 0)
+    {
+        status = symtableInsertFunc(funcTable, "readBoolean", S_TYPE_BOOL, 0,
+                                    NULL, NULL);
+    }
 
     free(paramsPrint);
     free(paramsToStr);
