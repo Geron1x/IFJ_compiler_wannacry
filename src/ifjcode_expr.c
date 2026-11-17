@@ -95,6 +95,30 @@ static const char* translateOperator(astOpType operation, dataType resultType)
     }
 }
 
+/** Makes one string from two */
+static int writeConcat(void)
+{
+    // take strings from stack, right one is on top
+    RETURN_IF_ERROR(writeTempInstruction("POPS", 2));
+    RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
+
+    // result goes to tmp1
+    RETURN_IF_ERROR(tryPrint("CONCAT "));
+    RETURN_IF_ERROR(writeTempVar(1));
+    RETURN_IF_ERROR(tryPrint(" "));
+
+    // two strings
+    RETURN_IF_ERROR(writeTempVar(1));
+    RETURN_IF_ERROR(tryPrint(" "));
+    RETURN_IF_ERROR(writeTempVar(2));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // put the result back on stack
+    RETURN_IF_ERROR(writeTempInstruction("PUSHS", 1));
+
+    return ERROR_SUCCESS;
+}
+
 /** Pushes left and right, and after that - does the operation */
 static int pushOperation(const astNode* binary)
 {
@@ -106,7 +130,11 @@ static int pushOperation(const astNode* binary)
     RETURN_IF_ERROR(pushExpression(left));
     RETURN_IF_ERROR(pushExpression(right));
 
-    // todo strings
+    // makes one string from two
+    if (binary->data.opType == AST_OP_ADD && binary->retType == S_TYPE_STRING)
+    {
+        return writeConcat();
+    }
 
     // print the operation text to stdout
     return tryPrint(translateOperator(binary->data.opType, binary->retType));
