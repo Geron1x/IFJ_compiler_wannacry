@@ -51,6 +51,67 @@ static int pushLiteral(const astNode* literal)
     return ERROR_SUCCESS;
 }
 
+/** Gives the IFJcode word for the operator, like a phrasebook */
+static const char* translateOperator(astOpType operation, dataType resultType)
+{
+    switch (operation)
+    {
+        case AST_OP_ADD:  // +
+            return "ADDS\n";
+
+        case AST_OP_SUB:  // -
+            return "SUBS\n";
+
+        case AST_OP_L:  // <
+            return "LTS\n";
+
+        case AST_OP_G:  // >
+            return "GTS\n";
+
+        case AST_OP_EQ:  // ==
+            return "EQS\n";
+
+        case AST_OP_LEQ:  // <= , like not >
+            return "GTS\nNOTS\n";
+
+        case AST_OP_GEQ:  // >=, like not <
+            return "LTS\nNOTS\n";
+
+        case AST_OP_NEQ:  // !=
+            return "EQS\nNOTS\n";
+
+        case AST_OP_MUL:  // *
+            return "MULS\n";
+
+        case AST_OP_DIV:  // /
+            if (resultType == S_TYPE_INT)
+            {
+                return "IDIVS\n";
+            }
+            return "DIVS\n";
+
+        default:
+            return NULL;
+    }
+}
+
+/** Pushes left and right, and after that - does the operation */
+static int pushOperation(const astNode* binary)
+{
+    // take left and right side of the operation
+    const astNode* left = binary->children[0];
+    const astNode* right = binary->children[1];
+
+    // put left and right on the stack
+    RETURN_IF_ERROR(pushExpression(left));
+    RETURN_IF_ERROR(pushExpression(right));
+
+    // todo strings
+
+    // print the operation text to stdout
+    return tryPrint(translateOperator(binary->data.opType, binary->retType));
+}
+
 /** Pushes value of the expression on the stack */
 int pushExpression(const astNode* expression)
 {
@@ -59,6 +120,10 @@ int pushExpression(const astNode* expression)
     {
         case AST_EXPR_LITERAL:
             RETURN_IF_ERROR(pushLiteral(expression));
+            break;
+
+        case AST_EXPR_BINARY:
+            RETURN_IF_ERROR(pushOperation(expression));
             break;
 
         default:
