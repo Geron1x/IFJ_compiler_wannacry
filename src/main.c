@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "ast.h"
+#include "ifjcode.h"
 #include "parser.h"
 #include "semantics.h"
 
@@ -21,7 +22,13 @@ int main(void)
         err = semanticsCheck(tree);
     }
 
-    // Free the tree, code generation will use it here later
+    // Generate IFJcode26
+    if (err == ERROR_SUCCESS)
+    {
+        err = generateIfjcode(tree);
+    }
+
+    // Free the tree
     astDestroy(tree);
     return err;
 }
