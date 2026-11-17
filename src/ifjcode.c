@@ -14,6 +14,7 @@
 #include <stdio.h>
 
 #include "ast_internal.h"
+#include "ifjcode_lib.h"
 #include "operands.h"
 
 /** Gives the main function */
@@ -116,6 +117,9 @@ int generateIfjcode(const astNode* program)
     {
         RETURN_IF_ERROR(generateFunction(program->children[i]));
     }
+
+    // add our library at the end
+    RETURN_IF_ERROR(writeLibrary());
 
     return ERROR_SUCCESS;
 }
