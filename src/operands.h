@@ -125,6 +125,15 @@ int writeFuncLabel(const char* name);
 int writeTempVar(size_t number);
 
 /**
+ * @brief Prints instruction with temp variable
+ *
+ * @param instruction
+ * @param number
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeTempInstruction(const char* instruction, size_t number);
+
+/**
  * @brief Prints a label we can jump to
  *
  * @param type

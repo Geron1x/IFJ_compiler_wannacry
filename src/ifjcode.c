@@ -61,11 +61,7 @@ static int writeProgramStart(const astNode* mainNode)
 /** Prints DEFVAR for temp variable */
 static int defineTempVar(size_t number)
 {
-    RETURN_IF_ERROR(tryPrint("DEFVAR "));
-    RETURN_IF_ERROR(writeTempVar(number));
-    RETURN_IF_ERROR(tryPrint("\n"));
-
-    return ERROR_SUCCESS;
+    return writeTempInstruction("DEFVAR", number);
 }
 
 /** Prints function */

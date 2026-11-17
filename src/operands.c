@@ -164,6 +164,18 @@ int writeTempVar(size_t number)
     return writeVarName("$tmp", number);
 }
 
+/** Prints instruction with temp variable */
+int writeTempInstruction(const char* instruction, size_t number)
+{
+    // for example POPS LF@$tmp$2
+    RETURN_IF_ERROR(tryPrint(instruction));
+    RETURN_IF_ERROR(tryPrint(" "));
+    RETURN_IF_ERROR(writeTempVar(number));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Gives us a text for jump labels */
 static const char* getJumpLabelText(jumpLabelType type)
 {
