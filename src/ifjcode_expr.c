@@ -158,6 +158,35 @@ static int pushCall(const astNode* call)
     return ERROR_SUCCESS;
 }
 
+/** Handles minus or plus before a number */
+static int pushUnary(const astNode* unary)
+{
+    // number comes first, sign comes later
+    RETURN_IF_ERROR(pushExpression(unary->children[0]));
+
+    // plus changes nothing
+    if (unary->data.opType == AST_OP_POS)
+    {
+        return ERROR_SUCCESS;
+    }
+
+    // just put -1 on stack
+    RETURN_IF_ERROR(tryPrint("PUSHS "));
+    if (unary->retType == S_TYPE_INT)
+    {
+        RETURN_IF_ERROR(writeLiteralInt(-1));
+    }
+    else
+    {
+        RETURN_IF_ERROR(writeLiteralFloat(-1.0));
+    }
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    RETURN_IF_ERROR(tryPrint("MULS\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Pushes value of the expression on the stack */
 int pushExpression(const astNode* expression)
 {
@@ -174,6 +203,10 @@ int pushExpression(const astNode* expression)
 
         case AST_EXPR_CALL:
             RETURN_IF_ERROR(pushCall(expression));
+            break;
+
+        case AST_EXPR_UNARY:
+            RETURN_IF_ERROR(pushUnary(expression));
             break;
 
         default:
