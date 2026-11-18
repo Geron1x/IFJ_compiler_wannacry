@@ -28,6 +28,7 @@ static void astInitNode(astNode* node, astNodeType nodeType, dataType retType)
     {
         return;
     }
+    node->typeInfo = NULL;
     node->int2float = false;
     node->nodeType = nodeType;
     node->retType = retType;
@@ -639,6 +640,408 @@ int astCreateLiteralUnit(astNode** retNode)
 
     return 0;
 }
+int astCreateListLiteral(astNode** retNode)
+{
+    if (retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    astInitNode(*retNode, AST_EXPR_LIST_LITERAL, S_TYPE_LIST);
+    return 0;
+}
+
+/** LAMDAS/LIST */
+
+typeDesc* typeCreatePrimitive(dataType type)
+{
+    typeDesc* desc = malloc(sizeof(typeDesc));
+    if (desc == NULL)
+    {
+        return NULL;
+    }
+    desc->type = type;
+    desc->elemType = NULL;
+    return desc;
+}
+
+typeDesc* typeCreateList(typeDesc* elemType)
+{
+    if (elemType == NULL)
+    {
+        return NULL;
+    }
+    typeDesc* desc = malloc(sizeof(typeDesc));
+    if (desc == NULL)
+    {
+        typeDescDestroy(elemType);
+        return NULL;
+    }
+    desc->type = S_TYPE_LIST;
+    desc->elemType = elemType;
+    return desc;
+}
+
+typeDesc* typeCreateFunc(int paramCount, typeDesc** paramTypes,
+                         typeDesc* returnType)
+{
+    if (returnType == NULL || (paramCount > 0 && paramTypes == NULL))
+    {
+        for (int i = 0; i < paramCount && paramTypes != NULL; i++)
+        {
+            typeDescDestroy(paramTypes[i]);
+        }
+        free(paramTypes);
+        typeDescDestroy(returnType);
+        return NULL;
+    }
+
+    typeDesc* desc = malloc(sizeof(typeDesc));
+    if (desc == NULL)
+    {
+        for (int i = 0; i < paramCount; i++)
+        {
+            typeDescDestroy(paramTypes[i]);
+        }
+        free(paramTypes);
+        typeDescDestroy(returnType);
+        return NULL;
+    }
+
+    desc->type = S_TYPE_FUNC;
+    desc->func.paramCount = paramCount;
+    if (paramCount > 0)
+    {
+        desc->func.paramTypes = paramTypes;
+    }
+    else
+    {
+        desc->func.paramTypes = NULL;
+    }
+    desc->func.returnType = returnType;
+    if (paramCount == 0 && paramTypes != NULL)
+    {
+        free(paramTypes);
+    }
+    return desc;
+}
+
+void typeDescDestroy(typeDesc* desc)
+{
+    if (desc == NULL)
+    {
+        return;
+    }
+
+    if (desc->type == S_TYPE_LIST)
+    {
+        typeDescDestroy(desc->elemType);
+    }
+    else if (desc->type == S_TYPE_FUNC)
+    {
+        if (desc->func.paramTypes != NULL)
+        {
+            for (int i = 0; i < desc->func.paramCount; i++)
+            {
+                typeDescDestroy(desc->func.paramTypes[i]);
+            }
+            free(desc->func.paramTypes);
+        }
+        typeDescDestroy(desc->func.returnType);
+    }
+
+    free(desc);
+}
+
+typeDesc* typeDescClone(const typeDesc* src)
+{
+    if (src == NULL)
+    {
+        return NULL;
+    }
+
+    if (src->type == S_TYPE_LIST)
+    {
+        typeDesc* clonedElem = typeDescClone(src->elemType);
+        if (clonedElem == NULL && src->elemType != NULL)
+        {
+            return NULL;
+        }
+        return typeCreateList(clonedElem);
+    }
+
+    if (src->type == S_TYPE_FUNC)
+    {
+        typeDesc** clonedParams = NULL;
+        if (src->func.paramCount > 0)
+        {
+            clonedParams = malloc(sizeof(typeDesc*) * src->func.paramCount);
+            if (clonedParams == NULL)
+            {
+                return NULL;
+            }
+            for (int i = 0; i < src->func.paramCount; i++)
+            {
+                clonedParams[i] = typeDescClone(src->func.paramTypes[i]);
+                if (clonedParams[i] == NULL && src->func.paramTypes[i] != NULL)
+                {
+                    for (int j = 0; j < i; j++)
+                    {
+                        typeDescDestroy(clonedParams[j]);
+                    }
+                    free(clonedParams);
+                    return NULL;
+                }
+            }
+        }
+
+        typeDesc* clonedRet = typeDescClone(src->func.returnType);
+        if (clonedRet == NULL && src->func.returnType != NULL)
+        {
+            for (int i = 0; i < src->func.paramCount; i++)
+            {
+                typeDescDestroy(clonedParams[i]);
+            }
+            free(clonedParams);
+            return NULL;
+        }
+
+        return typeCreateFunc(src->func.paramCount, clonedParams, clonedRet);
+    }
+
+    return typeCreatePrimitive(src->type);
+}
+
+bool typeDescEquals(const typeDesc* a, const typeDesc* b)
+{
+    if (a == b)
+    {
+        return true;
+    }
+    if (a == NULL || b == NULL)
+    {
+        return false;
+    }
+    if (a->type != b->type)
+    {
+        return false;
+    }
+
+    if (a->type == S_TYPE_LIST)
+    {
+        return typeDescEquals(a->elemType, b->elemType);
+    }
+
+    if (a->type == S_TYPE_FUNC)
+    {
+        if (a->func.paramCount != b->func.paramCount)
+        {
+            return false;
+        }
+        if (!typeDescEquals(a->func.returnType, b->func.returnType))
+        {
+            return false;
+        }
+        for (int i = 0; i < a->func.paramCount; i++)
+        {
+            if (!typeDescEquals(a->func.paramTypes[i], b->func.paramTypes[i]))
+            {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+void astSetTypeDesc(astNode* node, typeDesc* desc)
+{
+    if (node == NULL)
+    {
+        typeDescDestroy(desc);
+        return;
+    }
+    if (node->typeInfo != NULL)
+    {
+        typeDescDestroy(node->typeInfo);
+    }
+    node->typeInfo = desc;
+}
+
+int astCreateLambda(dataType retType, typeDesc* retTypeDesc, astNode* body,
+                    astNode** retNode)
+{
+    if (body == NULL || retNode == NULL)
+    {
+        typeDescDestroy(retTypeDesc);
+        return ERROR_INTERNAL;
+    }
+
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        typeDescDestroy(retTypeDesc);
+        return ERROR_INTERNAL;
+    }
+
+    astInitNode(*retNode, AST_EXPR_LAMBDA, retType);
+    (*retNode)->typeInfo = retTypeDesc;
+
+    Errors status = astBlockAppend(*retNode, body);
+    if (status != 0)
+    {
+        typeDescDestroy((*retNode)->typeInfo);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+
+    return 0;
+}
+
+int astCreateMember(const char* name, astNode* receiver, bool hasArgs,
+                    astNode** retNode)
+{
+    if (name == NULL || receiver == NULL || retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    astInitNode(*retNode, AST_EXPR_MEMBER, S_TYPE_UNKNOWN);
+    (*retNode)->data.memberData.key = malloc(strlen(name) + 1);
+    if ((*retNode)->data.memberData.key == NULL)
+    {
+        free(*retNode);
+        *retNode = NULL;
+        return ERROR_INTERNAL;
+    }
+    strcpy((*retNode)->data.memberData.key, name);
+    (*retNode)->data.memberData.hasArgs = hasArgs;
+
+    Errors status = astBlockAppend(*retNode, receiver);
+    if (status != 0)
+    {
+        free((*retNode)->data.memberData.key);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+
+    return 0;
+}
+
+int astCreateRange(astNode* from, astNode* end, astNode* step, bool isInclusive,
+                   astNode** retNode)
+{
+    if (from == NULL || end == NULL || retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    astInitNode(*retNode, AST_EXPR_RANGE, S_TYPE_UNKNOWN);
+    (*retNode)->data.rangeData.isInclusive = isInclusive;
+    (*retNode)->data.rangeData.hasStep = (step != NULL);
+
+    Errors status = astBlockAppend(*retNode, from);
+    if (status == 0) status = astBlockAppend(*retNode, end);
+    if (status == 0 && step != NULL) status = astBlockAppend(*retNode, step);
+
+    if (status != 0)
+    {
+        free((*retNode)->children);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+
+    return 0;
+}
+
+int astCreateCallExpr(astNode* calleeExpr, astNode** retNode)
+{
+    if (calleeExpr == NULL || retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    astInitNode(*retNode, AST_EXPR_CALL_EXPR, S_TYPE_UNKNOWN);
+
+    Errors status = astBlockAppend(*retNode, calleeExpr);
+    if (status != 0)
+    {
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+
+    return 0;
+}
+
+int astCreateForEach(const char* key, astNode* iterableExpr, astNode* body,
+                     astNode** retNode)
+{
+    if (key == NULL || iterableExpr == NULL || body == NULL || retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    astInitNode(*retNode, AST_STAT_FOR_EACH, S_TYPE_UNIT);
+    (*retNode)->data.forData.key = malloc(strlen(key) + 1);
+    if ((*retNode)->data.forData.key == NULL)
+    {
+        free(*retNode);
+        *retNode = NULL;
+        return ERROR_INTERNAL;
+    }
+    strcpy((*retNode)->data.forData.key, key);
+
+    Errors status = astBlockAppend(*retNode, iterableExpr);
+    if (status == 0) status = astBlockAppend(*retNode, body);
+
+    if (status != 0)
+    {
+        free((*retNode)->data.forData.key);
+        free((*retNode)->children);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+
+    return 0;
+}
+
+
+/** - LAMDAS/LIST */
 
 void astDestroy(astNode* node)
 {
@@ -652,25 +1055,39 @@ void astDestroy(astNode* node)
         astDestroy(node->children[i]);
     }
     free(node->children);
+    typeDescDestroy(node->typeInfo);
     /** The union member to free is determined by the node type */
-    if (node->retType == S_TYPE_STRING && node->nodeType == AST_EXPR_LITERAL)
+    switch (node->nodeType)
     {
-        free(node->data.strVal);
-    }
-    if (node->nodeType == AST_STAT_SET || node->nodeType == AST_STAT_VAR ||
-        node->nodeType == AST_EXPR_VAR)
-    {
-        free(node->data.varData
-                 .key); /** DANGEROUS PART, POSSIBLE MEM LEAK IF PARSER MAKE
-                           MISTAKE IN AST NODE CREATION OF A LITERAL */
-    }
-    if (node->nodeType == AST_FUNC || node->nodeType == AST_EXPR_CALL)
-    {
-        free(node->data.funcData.key);
-    }
-    if (node->nodeType == AST_STAT_FOR)
-    {
-        free(node->data.forData.key);
+        case AST_EXPR_LITERAL:
+            if (node->retType == S_TYPE_STRING)
+            {
+                free(node->data.strVal);
+            }
+            break;
+
+        case AST_STAT_SET:
+        case AST_STAT_VAR:
+        case AST_EXPR_VAR:
+            free(node->data.varData.key);
+            break;
+
+        case AST_FUNC:
+        case AST_EXPR_CALL:
+            free(node->data.funcData.key);
+            break;
+
+        case AST_EXPR_MEMBER:
+            free(node->data.memberData.key);
+            break;
+
+        case AST_STAT_FOR:
+        case AST_STAT_FOR_EACH:
+            free(node->data.forData.key);
+            break;
+
+        default:
+            break;
     }
     free(node);
 }

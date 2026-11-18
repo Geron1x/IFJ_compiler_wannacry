@@ -13,13 +13,34 @@
 
 #include "ast.h"
 
+/** type descriptor */
+typedef struct typeDesc
+{
+    dataType type; /** identifier for lists/lambdas */
+    union
+    {
+        /** if type is a list make elemType the type of elements inside of the
+         * list */
+        struct typeDesc* elemType;
+
+        /** if type is a function, pass according values */
+        struct
+        {
+            int paramCount;
+            struct typeDesc** paramTypes; /**< array of descriptor for the
+                                             parameters of the function */
+            struct typeDesc* returnType;  /**< descriptor of return type */
+        } func;
+    };
+} typeDesc;
+
 struct astNode
 {
     astNodeType nodeType;
     dataType retType; /**< what type of data will expression return*/
 
     struct astNode** children; /**< array to store descendent nodes */
-
+    typeDesc* typeInfo;
     int childCount;    /**< number of occupied slots in children array */
     int childCapacity; /**< max amount of children to store without expanding */
 
@@ -54,6 +75,16 @@ struct astNode
             bool isInclusive;
             bool hasStep;
         } forData;
+        struct
+        {
+            char* key;
+            bool hasArgs;
+        } memberData;
+        struct
+        {
+            bool isInclusive;
+            bool hasStep;
+        } rangeData;
     } data;
 };
 

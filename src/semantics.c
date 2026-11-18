@@ -28,14 +28,14 @@ static int checkBlock(astNode* blockNode, symtable* globalTable,
 static int checkFunctionBody(astNode* funcNode, symtable* globalTable);
 
 static int checkStatement(astNode* statNode, symtable* globalTable,
-                          astNode* currentNode);
+                          astNode* currentNode, bool isLastInBlock);
 
 static int checkVarDef(astNode* varNode, symtable* globalTable,
                        astNode* currentNode);
 static int checkSet(astNode* setNode, symtable* globalTable,
                     astNode* currentNode);
-static int checkIf(astNode* ifNode, symtable* globalTable,
-                   astNode* currentNode);
+static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
+                   bool isLastInBlock);
 static int checkWhile(astNode* whileNode, symtable* globalTable,
                       astNode* currentNode);
 static int checkReturn(astNode* returnNode, symtable* globalTable,
@@ -318,6 +318,31 @@ static void analyzeEnd(astNode* node, bool* allReturn, bool* allUnit)
             *allReturn = false;
             *allUnit = (lastStat->retType == S_TYPE_UNIT);
             return;
+        case AST_STAT_IF:
+        {
+            if (lastStat->childCount <= 2 || lastStat->children[2] == NULL)
+            {
+                *allReturn = false;
+                *allUnit = true;
+                return;
+            }
+            bool thenRet = false;
+            bool thenUnit = false;
+            bool elseRet = false;
+            bool elseUnit = false;
+            analyzeEnd(lastStat->children[1], &thenRet, &thenUnit);
+            analyzeEnd(lastStat->children[2], &elseRet, &elseUnit);
+            *allReturn = (thenRet && elseRet);
+            if (*allReturn)
+            {
+                *allUnit = false;
+            }
+            else
+            {
+                *allUnit = (lastStat->retType == S_TYPE_UNIT);
+            }
+            return;
+        }
         case AST_EXPR_IF:
         {
             bool thenRet = false;
@@ -337,32 +362,7 @@ static void analyzeEnd(astNode* node, bool* allReturn, bool* allUnit)
             }
             return;
         }
-        case AST_STAT_IF:
-        {
-            bool thenRet = false;
-            bool thenUnit = false;
-            bool elseRet = false;
-            bool elseUnit = false;
 
-            if (lastStat->childCount > 1)
-            {
-                analyzeEnd(lastStat->children[1], &thenRet, &thenUnit);
-            }
-
-            if (lastStat->childCount > 2 && lastStat->children[2] != NULL)
-            {
-                analyzeEnd(lastStat->children[2], &elseRet, &elseUnit);
-            }
-            else
-            {
-                elseRet = false;
-                elseUnit = true;
-            }
-
-            *allReturn = (thenRet && elseRet);
-            *allUnit = (thenUnit && elseUnit);
-            return;
-        }
 
         default:
             *allReturn = false;
@@ -403,6 +403,34 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
         case AST_EXPR_VAR:
         case AST_EXPR_CALL:
             return lastStat->retType;
+        case AST_STAT_IF:
+        {
+            if (lastStat->childCount <= 2 || lastStat->children[2] == NULL)
+            {
+                if (declaredType == S_TYPE_UNKNOWN)
+                {
+                    return S_TYPE_UNIT;
+                }
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+            bool thenRet = false;
+            bool thenUnit = false;
+            bool elseRet = false;
+            bool elseUnit = false;
+            analyzeEnd(lastStat->children[1], &thenRet, &thenUnit);
+            analyzeEnd(lastStat->children[2], &elseRet, &elseUnit);
+            if (thenRet && elseRet)
+            {
+                if (declaredType == S_TYPE_UNKNOWN)
+                {
+                    *err = ERROR_TYPE_MISMATCH;
+                    return S_TYPE_UNKNOWN;
+                }
+                return declaredType;
+            }
+            return lastStat->retType;
+        }
         case AST_EXPR_IF:
         {
             bool thenRet = false;
@@ -436,29 +464,6 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
             }
             return declaredType;
 
-        case AST_STAT_IF:
-        {
-            bool allReturn = false;
-            bool allUnit = false;
-            analyzeEnd(lastStat, &allReturn, &allUnit);
-
-            if (allReturn)
-            {
-                if (declaredType == S_TYPE_UNKNOWN)
-                {
-                    *err = ERROR_TYPE_MISMATCH;
-                    return S_TYPE_UNKNOWN;
-                }
-                return declaredType;
-            }
-            if (declaredType == S_TYPE_UNKNOWN && allUnit)
-            {
-                return S_TYPE_UNIT;
-            }
-
-            *err = ERROR_TYPE_MISMATCH;
-            return S_TYPE_UNKNOWN;
-        }
 
         default:
             *err = ERROR_TYPE_MISMATCH;
@@ -479,8 +484,8 @@ static int checkBlock(astNode* blockNode, symtable* globalTable,
     Errors status = 0;
     for (int i = 0; i < statCount; i++)
     {
-        status =
-            checkStatement(blockNode->children[i], globalTable, currentFunc);
+        status = checkStatement(blockNode->children[i], globalTable,
+                                currentFunc, i == statCount - 1);
         if (status != 0)
         {
             return status;
@@ -490,7 +495,7 @@ static int checkBlock(astNode* blockNode, symtable* globalTable,
     return 0;
 }
 static int checkStatement(astNode* statNode, symtable* globalTable,
-                          astNode* currentNode)
+                          astNode* currentNode, bool isLastInBlock)
 {
     Errors status = 0;
     switch (statNode->nodeType)
@@ -502,7 +507,7 @@ static int checkStatement(astNode* statNode, symtable* globalTable,
             status = checkSet(statNode, globalTable, currentNode);
             break;
         case AST_STAT_IF:
-            status = checkIf(statNode, globalTable, currentNode);
+            status = checkIf(statNode, globalTable, currentNode, isLastInBlock);
             break;
         case AST_STAT_WHILE:
             status = checkWhile(statNode, globalTable, currentNode);
@@ -702,13 +707,22 @@ static int checkSet(astNode* setNode, symtable* globalTable,
 }
 
 
-static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode)
+static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
+                   bool isLastInBlock)
 {
     if (ifNode == NULL || currentNode == NULL || ifNode->children[0] == NULL)
     {
         return ERROR_INTERNAL;
     }
+
+
     Errors status = 0;
+
+    if (isLastInBlock && ifNode->childCount > 2 && ifNode->children[2] != NULL)
+    {
+        checkIfExpr(ifNode, globalTable, currentNode, &status);
+        return status;
+    }
     /** check condition */
     dataType type =
         checkExpr(ifNode->children[0], globalTable, currentNode, &status);
@@ -759,6 +773,7 @@ static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode)
             return status;
         }
     }
+
     return 0;
 }
 

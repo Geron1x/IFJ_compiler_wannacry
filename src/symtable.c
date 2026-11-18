@@ -22,6 +22,7 @@
 struct variableData
 {
     dataType type;
+    typeDesc* typeInfo; /** type of a variable that requires descriptor */
     bool isConst;
     size_t instanceNum;
 };
@@ -31,9 +32,14 @@ struct functionData
     int paramCount;
     dataType* paramType;
     dataType returnType;
-    bool isAnalyzing;        /**< TODO */
-    bool isChecked;          /**< TODO */
-    struct astNode* astNode; /**< TODO */
+    typeDesc* returnTypeInfo; /** return type of a function that requires
+                                 descriptor */
+    struct astNode*
+        astNode; /**< get ptr to function's ast node from symtable */
+    typeDesc**
+        paramTypeInfos; /**< array of parameters that require descriptor */
+    bool isAnalyzing; /**< flag that shows whether function is being analyzed */
+    bool isChecked;   /**< flag that shows whether function has been checked */
 };
 
 struct nodeData
@@ -223,6 +229,8 @@ int symtableInsertFunc(symtable* symtable, const char* key, dataType returnType,
     data->type = TYPE_FUNCTION;
     data->funcData.paramCount = paramCount;
     data->funcData.returnType = returnType;
+    data->funcData.paramTypeInfos = NULL;
+    data->funcData.returnTypeInfo = NULL;
 
     if (paramCount > 0 && paramType != NULL)
     {
@@ -321,6 +329,7 @@ int stackInsertVar(symtable* symtable, const char* key, dataType type,
     newData->varData.type = type;
     newData->varData.isConst = isConst;
     newData->varData.instanceNum = symtable->varInstanceCounter;
+    newData->varData.typeInfo = NULL;
 
     bstStatus status = bstInsert(&(symtable->top->tree), key, newData);
     switch (status)
@@ -636,11 +645,28 @@ void eraseData(nodeData* data)
     {
         return;
     }
-    /** checking whether there are any paramenters store into array in function
-     * node*/
-    if (data->type == TYPE_FUNCTION)
+
+    if (data->type == TYPE_VARIABLE)
+    {
+        /** clears list's descriptor, if nothing present does nothing */
+        typeDescDestroy(data->varData.typeInfo);
+    }
+    else if (data->type == TYPE_FUNCTION)
     {
         free(data->funcData.paramType);
+
+
+        typeDescDestroy(data->funcData.returnTypeInfo);
+
+        /** clears the array of parameters with descriptor */
+        if (data->funcData.paramTypeInfos != NULL)
+        {
+            for (int i = 0; i < data->funcData.paramCount; i++)
+            {
+                typeDescDestroy(data->funcData.paramTypeInfos[i]);
+            }
+            free(data->funcData.paramTypeInfos);
+        }
     }
     free(data);
 }
