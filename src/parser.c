@@ -60,6 +60,8 @@ int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
 int parseElseIf(parcerContext* ctx, astNode** out);
 int parseWhile(parcerContext* ctx, astNode** out);
 int parseBranch(parcerContext* ctx, astNode** out);
+int parseOneLineBranch(parcerContext* ctx, astNode** out);
+int skipNewLineBeforeElse(parcerContext* ctx);
 int parseStatementEnd(parcerContext* ctx);
 
 
@@ -634,6 +636,8 @@ int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
     CHECK_ERR(match(ctx, TYPE_THEN));
     CHECK_ERR(parseBranch(ctx, thenBlock));
 
+    // After a one-line branch else may stand on the next line
+    CHECK_ERR(skipNewLineBeforeElse(ctx));
     // No else means the if is finished
     if (ctx->currentToken.type != TYPE_ELSE)
     {
@@ -679,11 +683,43 @@ int parseWhile(parcerContext* ctx, astNode** out)
     return err;
 }
 
-// Body of if, else or while: new line, then indented block
+// Body of if, else or while: indented block or one statement on the same line
 int parseBranch(parcerContext* ctx, astNode** out)
 {
-    CHECK_ERR(match(ctx, TYPE_EOL));
-    return parseBlock(ctx, out);
+    // New line opens an indented block
+    if (ctx->currentToken.type == TYPE_EOL)
+    {
+        CHECK_ERR(advance(ctx));
+        return parseBlock(ctx, out);
+    }
+    return parseOneLineBranch(ctx, out);
+}
+
+// One statement on the same line becomes a block with only that statement
+int parseOneLineBranch(parcerContext* ctx, astNode** out)
+{
+    // Definition alone in a branch is not allowed
+    if (ctx->currentToken.type == TYPE_VAL ||
+        ctx->currentToken.type == TYPE_VAR)
+    {
+        fprintf(stderr,
+                "Syntax err in line %d: definition cannot be a one-line body\n",
+                ctx->currentToken.line);
+        return ERROR_SYNTAX;
+    }
+
+    astNode* stmt = NULL;
+    CHECK_ERR(parseStatement(ctx, &stmt));
+    return wrapInBlock(stmt, out);
+}
+
+// Skip the new line only if else follows it on the next line
+int skipNewLineBeforeElse(parcerContext* ctx)
+{
+    if (ctx->currentToken.type != TYPE_EOL) return ERROR_SUCCESS;
+    CHECK_ERR(peek(ctx));
+    if (ctx->peekToken.type == TYPE_ELSE) return advance(ctx);
+    return ERROR_SUCCESS;
 }
 
 // End of statement: new line, ; or end of block or file
