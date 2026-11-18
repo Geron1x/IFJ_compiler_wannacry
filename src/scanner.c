@@ -66,6 +66,20 @@ typedef struct
         }                                       \
     } while (0)
 
+
+#define PARSE_DOUBLE(target)                             \
+    do                                                   \
+    {                                                    \
+        errno = 0;                                       \
+        (target) = strtod(attr.data, NULL);              \
+        if (errno == ERANGE && fabs(target) == HUGE_VAL) \
+        {                                                \
+            strFree(&attr);                              \
+            token->type = TYPE_ERROR;                    \
+            return ERROR_LEXICAL;                        \
+        }                                                \
+    } while (0)
+
 // init empty string for lexeme
 static int strInit(DynamicString* s)
 {
@@ -1024,14 +1038,14 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == 'd' || c == 'D')
                 {
                     token->type = TYPE_DOUBLE_LITERAL;
-                    token->value.numberFloat = strtod(attr.data, NULL);
+                    PARSE_DOUBLE(token->value.numberFloat);
                     strFree(&attr);
                     return ERROR_SUCCESS;
                 }
 
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
-                token->value.numberFloat = strtod(attr.data, NULL);
+                PARSE_DOUBLE(token->value.numberFloat);
                 strFree(&attr);
                 return ERROR_SUCCESS;
 
@@ -1104,14 +1118,14 @@ int getToken(Token* token, Scanner* scanner)
                 if (c == 'd' || c == 'D')
                 {
                     token->type = TYPE_DOUBLE_LITERAL;
-                    token->value.numberFloat = strtod(attr.data, NULL);
+                    PARSE_DOUBLE(token->value.numberFloat);
                     strFree(&attr);
                     return ERROR_SUCCESS;
                 }
 
                 ungetc(c, scanner->stream);
                 token->type = TYPE_DOUBLE_LITERAL;
-                token->value.numberFloat = strtod(attr.data, NULL);
+                PARSE_DOUBLE(token->value.numberFloat);
                 strFree(&attr);
                 return ERROR_SUCCESS;
 
