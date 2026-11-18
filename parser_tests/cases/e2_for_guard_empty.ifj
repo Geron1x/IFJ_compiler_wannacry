@@ -1,0 +1,3 @@
+import ifj26.*
+@main def m(): Unit =
+  for i <- 1 to 10 if do print(i)

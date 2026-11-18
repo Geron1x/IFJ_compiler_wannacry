@@ -23,6 +23,19 @@ typedef struct
 
 #define PARAM_LIST_INIT_CAPACITY 4
 
+// Parts of a for loop collected before its node is made
+typedef struct
+{
+    char* name;        // loop variable
+    astNode* from;     // range start or the list
+    astNode* end;      // range end, NULL for a list
+    astNode* step;     // step after by or NULL
+    astNode* guard;    // guards joined with and or NULL
+    astNode* body;     // loop body block
+    bool isInclusive;  // true for to, false for until
+    bool isRange;      // false when the source is a list
+} ForParts;
+
 // Work with tokens
 void freeTokenValue(Token* token);
 int matchDataType(parcerContext* ctx, dataType* type);
@@ -59,6 +72,13 @@ int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
                  astNode** elseBlock);
 int parseElseIf(parcerContext* ctx, astNode** out);
 int parseWhile(parcerContext* ctx, astNode** out);
+int parseFor(parcerContext* ctx, astNode** out);
+int parseForHeader(parcerContext* ctx, ForParts* parts);
+int parseForSource(parcerContext* ctx, ForParts* parts);
+int parseForGuards(parcerContext* ctx, bool isMultiLine, astNode** guard);
+int joinGuard(astNode** guard, astNode* cond);
+int buildFor(ForParts* parts, astNode** out);
+void forPartsFree(ForParts* parts);
 int parseBranch(parcerContext* ctx, astNode** out);
 int parseOneLineBranch(parcerContext* ctx, astNode** out);
 int skipNewLineBeforeElse(parcerContext* ctx);
@@ -484,6 +504,8 @@ int parseStatement(parcerContext* ctx, astNode** out)
             return parseIf(ctx, out);
         case TYPE_WHILE:
             return parseWhile(ctx, out);
+        case TYPE_FOR:
+            return parseFor(ctx, out);
         // Line with a value is an expression statement
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
@@ -684,6 +706,157 @@ int parseWhile(parcerContext* ctx, astNode** out)
         astDestroy(body);
     }
     return err;
+}
+
+// for, header, do, body
+int parseFor(parcerContext* ctx, astNode** out)
+{
+    CHECK_ERR(advance(ctx));
+
+    // Every part is freed at the end unless the loop node took it
+    ForParts parts = {.name = NULL};
+    int err = parseForHeader(ctx, &parts);
+    if (err == ERROR_SUCCESS) err = match(ctx, TYPE_DO);
+    if (err == ERROR_SUCCESS) err = parseBranch(ctx, &parts.body);
+    if (err == ERROR_SUCCESS) err = buildFor(&parts, out);
+    forPartsFree(&parts);
+    return err;
+}
+
+// Loop variable, arrow, source and guards, on one line or as a block
+int parseForHeader(parcerContext* ctx, ForParts* parts)
+{
+    // New line right after for opens an indented header
+    bool isMultiLine = ctx->currentToken.type == TYPE_EOL;
+    if (isMultiLine)
+    {
+        CHECK_ERR(advance(ctx));
+        CHECK_ERR(match(ctx, TYPE_INDENT));
+    }
+
+    CHECK_ERR(takeName(ctx, &parts->name));
+    CHECK_ERR(match(ctx, TYPE_LARROW));
+    CHECK_ERR(parseForSource(ctx, parts));
+    CHECK_ERR(parseForGuards(ctx, isMultiLine, &parts->guard));
+
+    // Indented header ends before do, which is aligned with for
+    if (isMultiLine)
+    {
+        CHECK_ERR(match(ctx, TYPE_EOL));
+        CHECK_ERR(match(ctx, TYPE_DEDENT));
+    }
+    return ERROR_SUCCESS;
+}
+
+// Range with to or until and optional by step, anything else is a list
+int parseForSource(parcerContext* ctx, ForParts* parts)
+{
+    CHECK_ERR(parseExpression(ctx, &parts->from));
+
+    // Without to or until the source is a list
+    if (ctx->currentToken.type != TYPE_IDENTIFIER ||
+        (strcmp(ctx->currentToken.value.identifier, "to") != 0 &&
+         strcmp(ctx->currentToken.value.identifier, "until") != 0))
+    {
+        return ERROR_SUCCESS;
+    }
+    parts->isRange = true;
+    parts->isInclusive = strcmp(ctx->currentToken.value.identifier, "to") == 0;
+    CHECK_ERR(advance(ctx));
+    CHECK_ERR(parseExpression(ctx, &parts->end));
+
+    // Step is written after by
+    if (ctx->currentToken.type == TYPE_IDENTIFIER &&
+        strcmp(ctx->currentToken.value.identifier, "by") == 0)
+    {
+        CHECK_ERR(advance(ctx));
+        CHECK_ERR(parseExpression(ctx, &parts->step));
+    }
+    return ERROR_SUCCESS;
+}
+
+// Any number of guards, each is if and a condition
+int parseForGuards(parcerContext* ctx, bool isMultiLine, astNode** guard)
+{
+    while (true)
+    {
+        // In an indented header a guard may start on its own line
+        if (isMultiLine && ctx->currentToken.type == TYPE_EOL)
+        {
+            CHECK_ERR(peek(ctx));
+            if (ctx->peekToken.type != TYPE_IF) return ERROR_SUCCESS;
+            CHECK_ERR(advance(ctx));
+        }
+        if (ctx->currentToken.type != TYPE_IF) return ERROR_SUCCESS;
+        CHECK_ERR(advance(ctx));
+
+        astNode* cond = NULL;
+        CHECK_ERR(parseExpression(ctx, &cond));
+        CHECK_ERR(joinGuard(guard, cond));
+    }
+}
+
+// Join a new condition to the guards so far with and
+// The condition is freed on failure, the guard stays with the caller
+int joinGuard(astNode** guard, astNode* cond)
+{
+    if (*guard == NULL)
+    {
+        *guard = cond;
+        return ERROR_SUCCESS;
+    }
+    astNode* both = NULL;
+    int err = astCreateBinary(AST_OP_AND, *guard, cond, &both);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(cond);
+        return err;
+    }
+    *guard = both;
+    return ERROR_SUCCESS;
+}
+
+// Make the loop node, guards go into the body as one if
+int buildFor(ForParts* parts, astNode** out)
+{
+    // Loop over a list needs nodes the tree does not have yet
+    if (!parts->isRange)
+    {
+        fprintf(stderr,
+                "Internal err: for over a list is not supported in AST yet\n");
+        return ERROR_INTERNAL;
+    }
+
+    // Body runs only when all guards are true
+    if (parts->guard != NULL)
+    {
+        astNode* guarded = NULL;
+        CHECK_ERR(astCreateIf(parts->guard, parts->body, NULL, &guarded));
+        parts->guard = NULL;
+        parts->body = NULL;
+        CHECK_ERR(wrapInBlock(guarded, &parts->body));
+    }
+
+    CHECK_ERR(astCreateFor(parts->name, parts->from, parts->end, parts->step,
+                           parts->isInclusive, parts->body, 0, out));
+
+    // Loop node owns these parts now
+    parts->from = NULL;
+    parts->end = NULL;
+    parts->step = NULL;
+    parts->body = NULL;
+    return ERROR_SUCCESS;
+}
+
+// Free every part the loop node did not take
+void forPartsFree(ForParts* parts)
+{
+    free(parts->name);
+    astDestroy(parts->from);
+    astDestroy(parts->end);
+    astDestroy(parts->step);
+    astDestroy(parts->guard);
+    astDestroy(parts->body);
 }
 
 // Body of if, else or while: indented block or one statement on the same line
