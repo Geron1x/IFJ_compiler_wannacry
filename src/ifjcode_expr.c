@@ -15,6 +15,14 @@
 #include "ast_internal.h"
 #include "operands.h"
 
+/** Gives the next free label number */
+size_t takeLabelNumber(codegenContext* context)
+{
+    context->labelCounter++;
+
+    return context->labelCounter;
+}
+
 /** Pushes literal on the stack */
 static int pushLiteral(const astNode* literal)
 {
@@ -120,15 +128,15 @@ static int writeConcat(void)
 }
 
 /** Pushes left and right, and after that - does the operation */
-static int pushOperation(const astNode* binary)
+static int pushOperation(const astNode* binary, codegenContext* context)
 {
     // take left and right side of the operation
     const astNode* left = binary->children[0];
     const astNode* right = binary->children[1];
 
     // put left and right on the stack
-    RETURN_IF_ERROR(pushExpression(left));
-    RETURN_IF_ERROR(pushExpression(right));
+    RETURN_IF_ERROR(pushExpression(left, context));
+    RETURN_IF_ERROR(pushExpression(right, context));
 
     // makes one string from two
     if (binary->data.opType == AST_OP_ADD && binary->retType == S_TYPE_STRING)
@@ -141,14 +149,14 @@ static int pushOperation(const astNode* binary)
 }
 
 /** Pushes all arguments and calls the function */
-static int pushCall(const astNode* call)
+static int pushCall(const astNode* call, codegenContext* context)
 {
     size_t argumentCount = (size_t)call->childCount;
 
     // put every argument on stack, from left to right
     for (size_t i = 0; i < argumentCount; i++)
     {
-        RETURN_IF_ERROR(pushExpression(call->children[i]));
+        RETURN_IF_ERROR(pushExpression(call->children[i], context));
     }
 
     RETURN_IF_ERROR(tryPrint("CALL "));
@@ -159,10 +167,10 @@ static int pushCall(const astNode* call)
 }
 
 /** Handles minus or plus before a number */
-static int pushUnary(const astNode* unary)
+static int pushUnary(const astNode* unary, codegenContext* context)
 {
     // number comes first, sign comes later
-    RETURN_IF_ERROR(pushExpression(unary->children[0]));
+    RETURN_IF_ERROR(pushExpression(unary->children[0], context));
 
     // plus changes nothing
     if (unary->data.opType == AST_OP_POS)
@@ -188,7 +196,7 @@ static int pushUnary(const astNode* unary)
 }
 
 /** Pushes value of the expression on the stack */
-int pushExpression(const astNode* expression)
+int pushExpression(const astNode* expression, codegenContext* context)
 {
     // look what kind of expression we got
     switch (expression->nodeType)
@@ -198,15 +206,15 @@ int pushExpression(const astNode* expression)
             break;
 
         case AST_EXPR_BINARY:
-            RETURN_IF_ERROR(pushOperation(expression));
+            RETURN_IF_ERROR(pushOperation(expression, context));
             break;
 
         case AST_EXPR_CALL:
-            RETURN_IF_ERROR(pushCall(expression));
+            RETURN_IF_ERROR(pushCall(expression, context));
             break;
 
         case AST_EXPR_UNARY:
-            RETURN_IF_ERROR(pushUnary(expression));
+            RETURN_IF_ERROR(pushUnary(expression, context));
             break;
 
         default:
