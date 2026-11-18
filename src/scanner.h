@@ -12,6 +12,8 @@
 #define IFJ_SCANNER_H
 
 #include <ctype.h>
+#include <errno.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
