@@ -1,0 +1,5 @@
+import ifj26.*
+def f(a: Int, b: Int): Int =
+  return a + b
+@main def m(): Unit =
+  print(s"${f(1, 2)}x ${f(f(1, 2), 3) * 2} ${strLength("ab")}")

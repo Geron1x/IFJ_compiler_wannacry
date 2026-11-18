@@ -483,6 +483,7 @@ int parseStatement(parcerContext* ctx, astNode** out)
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
         case TYPE_STRING_LITERAL:
+        case TYPE_INTERP_START:
         case TYPE_TRUE:
         case TYPE_FALSE:
         case TYPE_LEFT_PAREN:
@@ -899,8 +900,9 @@ int peek(parcerContext* ctx)
 // Free the string that the token owns
 void freeTokenValue(Token* token)
 {
-    // Only names and strings have allocated memory
-    if (token->type == TYPE_IDENTIFIER || token->type == TYPE_STRING_LITERAL)
+    // Names, strings and text parts of interpolated strings own memory
+    if (token->type == TYPE_IDENTIFIER || token->type == TYPE_STRING_LITERAL ||
+        token->type == TYPE_STR_PART)
     {
         free(token->value.identifier);
         token->value.identifier = NULL;

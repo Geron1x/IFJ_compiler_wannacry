@@ -1,0 +1,5 @@
+import ifj26.*
+@main def m(): Unit =
+  val name = "IFJ"
+  print(s"""He said "hello", $name.
+Second line.""")

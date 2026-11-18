@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val x = 5
+  print(s"a ${s"in $x"} b")

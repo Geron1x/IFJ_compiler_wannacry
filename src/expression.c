@@ -324,6 +324,7 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
         case TYPE_STRING_LITERAL:
+        case TYPE_INTERP_START:
         case TYPE_TRUE:
         case TYPE_FALSE:
             return PS_OPERAND;
@@ -354,9 +355,134 @@ static int precCreateLiteral(const Token* tok, astNode** out)
     }
 }
 
+// Wrap a value into a toStr call, the value is freed on failure
+static int interpToStr(astNode* value, astNode** out)
+{
+    astNode* call = NULL;
+    int err = astCreateCall("toStr", &call);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(value);
+        return err;
+    }
+    // appendChild frees the value itself when it fails
+    err = appendChild(call, value);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(call);
+        return err;
+    }
+    *out = call;
+    return ERROR_SUCCESS;
+}
+
+// Join a new part to the string built so far with plus
+// The part is freed on failure, the result stays with the caller
+static int interpJoin(astNode** result, astNode* part)
+{
+    // First part becomes the whole result
+    if (*result == NULL)
+    {
+        *result = part;
+        return ERROR_SUCCESS;
+    }
+    astNode* sum = NULL;
+    int err = astCreateBinary(AST_OP_ADD, *result, part, &sum);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(part);
+        return err;
+    }
+    *result = sum;
+    return ERROR_SUCCESS;
+}
+
+// Read one part of the string: text, $name or ${expression}
+static int interpPart(parcerContext* ctx, astNode** part)
+{
+    astNode* value = NULL;
+    switch (ctx->currentToken.type)
+    {
+        // Plain text becomes a string literal
+        case TYPE_STR_PART:
+            CHECK_ERR(
+                astCreateLiteralString(ctx->currentToken.value.string, &value));
+            break;
+        // Name after dollar becomes toStr of that name
+        case TYPE_IDENTIFIER:
+            CHECK_ERR(
+                astCreateVarExpr(ctx->currentToken.value.identifier, &value));
+            CHECK_ERR(interpToStr(value, &value));
+            break;
+        // Expression in braces becomes toStr of that expression
+        case TYPE_LEFT_BRACE:
+            CHECK_ERR(advance(ctx));
+            CHECK_ERR(parseExpression(ctx, &value));
+            if (ctx->currentToken.type != TYPE_RIGHT_BRACE)
+            {
+                astDestroy(value);
+                fprintf(stderr, "Syntax err in line %d: expected }\n",
+                        ctx->currentToken.line);
+                return ERROR_SYNTAX;
+            }
+            CHECK_ERR(interpToStr(value, &value));
+            break;
+        default:
+            fprintf(stderr,
+                    "Syntax err in line %d: invalid interpolated string\n",
+                    ctx->currentToken.line);
+            return ERROR_SYNTAX;
+    }
+
+    // Step over the last token of the part
+    int err = advance(ctx);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(value);
+        return err;
+    }
+    *part = value;
+    return ERROR_SUCCESS;
+}
+
+// Interpolated string: all parts joined with plus into one String value
+static int parseInterpolation(parcerContext* ctx, astNode** out)
+{
+    // Skip the opening quote
+    CHECK_ERR(advance(ctx));
+
+    astNode* result = NULL;
+    int err = ERROR_SUCCESS;
+    // Read parts until the closing quote
+    while (err == ERROR_SUCCESS && ctx->currentToken.type != TYPE_INTERP_END)
+    {
+        astNode* part = NULL;
+        err = interpPart(ctx, &part);
+        if (err == ERROR_SUCCESS) err = interpJoin(&result, part);
+    }
+
+    // Empty string without parts is just an empty literal
+    if (err == ERROR_SUCCESS && result == NULL)
+        err = astCreateLiteralString("", &result);
+    // Skip the closing quote
+    if (err == ERROR_SUCCESS) err = advance(ctx);
+
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(result);
+        return err;
+    }
+    *out = result;
+    return ERROR_SUCCESS;
+}
+
 // Read one operand and build its node: literal, name, call or ()
 static int precConsumeOperand(parcerContext* ctx, astNode** out)
 {
+    // Interpolated string is one operand
+    if (ctx->currentToken.type == TYPE_INTERP_START)
+        return parseInterpolation(ctx, out);
+
     // Empty parentheses are two tokens and mean the Unit value
     if (ctx->currentToken.type == TYPE_LEFT_PAREN)
     {
@@ -492,6 +618,7 @@ bool canStartExpression(Type type)
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
         case TYPE_STRING_LITERAL:
+        case TYPE_INTERP_START:
         case TYPE_LEFT_PAREN:
         case TYPE_ADD:
         case TYPE_SUB:
