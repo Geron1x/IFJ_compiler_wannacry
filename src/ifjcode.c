@@ -14,6 +14,7 @@
 #include <stdio.h>
 
 #include "ast_internal.h"
+#include "ifjcode_expr.h"
 #include "ifjcode_lib.h"
 #include "operands.h"
 
@@ -65,14 +66,37 @@ static int defineTempVar(size_t number)
     return writeTempInstruction("DEFVAR", number);
 }
 
+/** Prints the way out of the function */
+static int writeFunctionExit(const codegenContext* context)
+{
+    // look if the func - returns Unit
+    bool isFunctionUnit;
+    isFunctionUnit = (context->currentFunction->retType == S_TYPE_UNIT);
+
+    // Unit func gives ()
+    if (isFunctionUnit == true)
+    {
+        RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
+        RETURN_IF_ERROR(tryPrint("PUSHS nil@nil\n"));
+    }
+
+    RETURN_IF_ERROR(tryPrint("POPFRAME\n"));
+    RETURN_IF_ERROR(tryPrint("RETURN\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Prints function */
-static int generateFunction(const astNode* function)
+static int generateFunction(const astNode* function, codegenContext* context)
 {
     // Program should have only functions here
     if (function->nodeType != AST_FUNC)
     {
         return ERROR_INTERNAL;
     }
+
+    // which func we are in rn
+    context->currentFunction = function;
 
     RETURN_IF_ERROR(tryPrint("\nLABEL "));
     RETURN_IF_ERROR(writeFuncLabel(function->data.funcData.key));
@@ -85,8 +109,8 @@ static int generateFunction(const astNode* function)
     RETURN_IF_ERROR(defineTempVar(2));
 
     // todo, body of the func
-    RETURN_IF_ERROR(tryPrint("POPFRAME\n"));
-    RETURN_IF_ERROR(tryPrint("RETURN\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS nil@nil\n"));
+    RETURN_IF_ERROR(writeFunctionExit(context));
 
     return ERROR_SUCCESS;
 }
@@ -98,6 +122,11 @@ int generateIfjcode(const astNode* program)
     {
         return ERROR_INTERNAL;
     }
+
+    // Notebook for the label counter and the current function
+    codegenContext context;
+    context.labelCounter = 0;
+    context.currentFunction = NULL;
 
     // We need main to know what to call at the start
     const astNode* mainNode = findMainFunction(program);
@@ -115,7 +144,7 @@ int generateIfjcode(const astNode* program)
     // Print every function in the order from the tree
     for (size_t i = 0; i < functionCount; i++)
     {
-        RETURN_IF_ERROR(generateFunction(program->children[i]));
+        RETURN_IF_ERROR(generateFunction(program->children[i], &context));
     }
 
     // add our library at the end
