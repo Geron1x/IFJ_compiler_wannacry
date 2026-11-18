@@ -1,0 +1,6 @@
+import ifj26.*
+@main def m(): Unit =
+  val x = 1
+  print(s"")
+  print(s"abc")
+  print(s"$x")

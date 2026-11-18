@@ -1,0 +1,9 @@
+import ifj26.*
+def g(x: Int): String =
+  return s"g=$x"
+@main def m(): Unit =
+  val n = 3
+  val t = s"a" + s"$n" + "b"
+  print(g(n) + t)
+  print(s"${n > 2}")
+  s"stmt $n"
