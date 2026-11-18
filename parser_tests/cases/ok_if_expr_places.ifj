@@ -1,0 +1,13 @@
+import ifj26.*
+def f(a: Int, b: Int): Int =
+  return a + b
+def g(c: Boolean): Int =
+  return if c then 1 else 2
+@main def m(): Unit =
+  var x = 0
+  val c = true
+  x = if c then 3 else 4
+  print(f(if c then 1 else 2, 3))
+  print(s"v=${if c then 5 else 6}")
+  print((if c then 1 else 2) + 1)
+  print(g(c) + x)

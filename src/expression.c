@@ -314,8 +314,10 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         // Empty parentheses are the Unit value
         // Unit
         case TYPE_LEFT_PAREN:
-            return (ctx->peekToken.type == TYPE_RIGHT_PAREN) ? PS_OPERAND
-                                                             : PS_LPAREN;
+            return (ctx->peekToken.type == TYPE_RIGHT_PAREN ||
+                    ctx->peekToken.type == TYPE_IF)
+                       ? PS_OPERAND
+                       : PS_LPAREN;
         // Extra closing parenthesis belongs to the caller
         case TYPE_RIGHT_PAREN:
             return (depth > 0) ? PS_RPAREN : PS_END;
@@ -417,7 +419,7 @@ static int interpPart(parcerContext* ctx, astNode** part)
         // Expression in braces becomes toStr of that expression
         case TYPE_LEFT_BRACE:
             CHECK_ERR(advance(ctx));
-            CHECK_ERR(parseExpression(ctx, &value));
+            CHECK_ERR(parseExpressionOrIf(ctx, &value));
             if (ctx->currentToken.type != TYPE_RIGHT_BRACE)
             {
                 astDestroy(value);
@@ -482,6 +484,15 @@ static int precConsumeOperand(parcerContext* ctx, astNode** out)
     // Interpolated string is one operand
     if (ctx->currentToken.type == TYPE_INTERP_START)
         return parseInterpolation(ctx, out);
+
+    // If value in parentheses is one operand
+    if (ctx->currentToken.type == TYPE_LEFT_PAREN &&
+        ctx->peekToken.type == TYPE_IF)
+    {
+        CHECK_ERR(advance(ctx));
+        CHECK_ERR(parseIfExpression(ctx, out));
+        return match(ctx, TYPE_RIGHT_PAREN);
+    }
 
     // Empty parentheses are two tokens and mean the Unit value
     if (ctx->currentToken.type == TYPE_LEFT_PAREN)
@@ -625,6 +636,7 @@ bool canStartExpression(Type type)
         case TYPE_EXCLAMATION:
         case TYPE_TRUE:
         case TYPE_FALSE:
+        case TYPE_IF:
             return true;
         default:
             return false;
