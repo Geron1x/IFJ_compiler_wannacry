@@ -154,14 +154,6 @@ static bool precMatchRule(const StackItem* rhs, size_t len)
     return binary || parens;
 }
 
-// Logical operators are not in ast.h yet, so the tree cannot hold them
-static int precNoLogicalOp(const char* name)
-{
-    fprintf(stderr, "Internal err: operator %s is not supported in AST yet\n",
-            name);
-    return ERROR_INTERNAL;
-}
-
 // Operator of a binary node from its token
 static int precBinaryOp(Type type, astOpType* op)
 {
@@ -198,9 +190,11 @@ static int precBinaryOp(Type type, astOpType* op)
             *op = AST_OP_NEQ;
             break;
         case TYPE_AND:
-            return precNoLogicalOp("&&");
+            *op = AST_OP_AND;
+            break;
         case TYPE_OR:
-            return precNoLogicalOp("||");
+            *op = AST_OP_OR;
+            break;
         default:
             return ERROR_INTERNAL;
     }
@@ -219,7 +213,8 @@ static int precUnaryOp(Type type, astOpType* op)
             *op = AST_OP_NEG;
             break;
         case TYPE_EXCLAMATION:
-            return precNoLogicalOp("!");
+            *op = AST_OP_NOT;
+            break;
         default:
             return ERROR_INTERNAL;
     }
