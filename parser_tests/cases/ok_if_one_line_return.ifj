@@ -1,0 +1,5 @@
+import ifj26.*
+def f(a: Boolean): Int =
+  if a then return 1 else return 2
+@main def m(): Unit =
+  print(f(true))

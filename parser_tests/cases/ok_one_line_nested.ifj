@@ -1,0 +1,11 @@
+import ifj26.*
+@main def m(): Unit =
+  var x = 0
+  var a = true
+  val b = true
+  while a do if b then x = 1 else x = 2
+  if a then
+    if b then x = 3
+  else
+    x = 4
+  print(x)
