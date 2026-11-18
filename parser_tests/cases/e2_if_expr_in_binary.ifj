@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val c = true
+  val a = 1 + if c then 1 else 2

@@ -70,6 +70,24 @@ int peek(parcerContext* ctx);
 int match(parcerContext* ctx, Type expectedType);
 
 /**
+ * @brief Parses a value that may also be an if with else.
+ *
+ * @param ctx Parser state, current token starts the value.
+ * @param out Receives the tree of the value on success.
+ * @return ERROR_SUCCESS, ERROR_LEXICAL, ERROR_SYNTAX or ERROR_INTERNAL.
+ */
+int parseExpressionOrIf(parcerContext* ctx, astNode** out);
+
+/**
+ * @brief Parses if used as a value, the else branch is required.
+ *
+ * @param ctx Parser state, current token is if.
+ * @param out Receives the if expression node on success.
+ * @return ERROR_SUCCESS, ERROR_LEXICAL, ERROR_SYNTAX or ERROR_INTERNAL.
+ */
+int parseIfExpression(parcerContext* ctx, astNode** out);
+
+/**
  * @brief Parses call arguments: values in parentheses separated by commas.
  *
  * @param ctx Parser state, current token is the opening parenthesis.

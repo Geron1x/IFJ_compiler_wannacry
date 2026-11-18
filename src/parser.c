@@ -62,6 +62,9 @@ int parseWhile(parcerContext* ctx, astNode** out);
 int parseBranch(parcerContext* ctx, astNode** out);
 int parseOneLineBranch(parcerContext* ctx, astNode** out);
 int skipNewLineBeforeElse(parcerContext* ctx);
+int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
+                           astNode** thenBlock, astNode** elseBlock);
+int parseValueBranch(parcerContext* ctx, astNode** out);
 int parseStatementEnd(parcerContext* ctx);
 
 
@@ -306,11 +309,11 @@ int parseFunctionBody(parcerContext* ctx, astNode** out)
 
     // Otherwise the body is one expression on the same line
     astNode* expr = NULL;
-    CHECK_ERR(parseExpression(ctx, &expr));
+    CHECK_ERR(parseExpressionOrIf(ctx, &expr));
 
-    // Nothing else may follow it on this line
+    // Nothing else may follow it on this line, a block branch already ended it
     if (ctx->currentToken.type != TYPE_EOL &&
-        ctx->currentToken.type != TYPE_EOF)
+        ctx->currentToken.type != TYPE_EOF && ctx->prevType != TYPE_DEDENT)
     {
         astDestroy(expr);
         fprintf(stderr,
@@ -560,7 +563,7 @@ int parseTypeAndValue(parcerContext* ctx, dataType* type, astNode** expr)
         CHECK_ERR(matchDataType(ctx, type));
     }
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
-    return parseExpression(ctx, expr);
+    return parseExpressionOrIf(ctx, expr);
 }
 
 // Assignment: name, =, value
@@ -572,7 +575,7 @@ int parseAssignment(parcerContext* ctx, astNode** out)
 
     astNode* expr = NULL;
     int err = match(ctx, TYPE_ASSIGNMENT);
-    if (err == ERROR_SUCCESS) err = parseExpression(ctx, &expr);
+    if (err == ERROR_SUCCESS) err = parseExpressionOrIf(ctx, &expr);
 
     // Assignment node owns the value, on failure the value is freed here
     if (err == ERROR_SUCCESS)
@@ -593,7 +596,7 @@ int parseReturn(parcerContext* ctx, astNode** out)
     astNode* expr = NULL;
     if (canStartExpression(ctx->currentToken.type))
     {
-        CHECK_ERR(parseExpression(ctx, &expr));
+        CHECK_ERR(parseExpressionOrIf(ctx, &expr));
     }
 
     // Empty return has no child
@@ -722,6 +725,78 @@ int skipNewLineBeforeElse(parcerContext* ctx)
     return ERROR_SUCCESS;
 }
 
+// Value that may also be an if with else
+int parseExpressionOrIf(parcerContext* ctx, astNode** out)
+{
+    if (ctx->currentToken.type == TYPE_IF) return parseIfExpression(ctx, out);
+    return parseExpression(ctx, out);
+}
+
+// If used as a value, its result is the value of the chosen branch
+int parseIfExpression(parcerContext* ctx, astNode** out)
+{
+    CHECK_ERR(advance(ctx));
+
+    // Parts are collected first, the node is made when all are ready
+    astNode* cond = NULL;
+    astNode* thenBlock = NULL;
+    astNode* elseBlock = NULL;
+    int err = parseIfExpressionParts(ctx, &cond, &thenBlock, &elseBlock);
+    if (err == ERROR_SUCCESS)
+        err = astCreateIfExpr(cond, thenBlock, elseBlock, out);
+
+    // On any failure the parts belong to nobody, so free them here
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(cond);
+        astDestroy(thenBlock);
+        astDestroy(elseBlock);
+    }
+    return err;
+}
+
+// Condition, then branch and the required else branch of an if value
+int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
+                           astNode** thenBlock, astNode** elseBlock)
+{
+    CHECK_ERR(parseExpression(ctx, cond));
+    CHECK_ERR(match(ctx, TYPE_THEN));
+    CHECK_ERR(parseValueBranch(ctx, thenBlock));
+
+    // Else is required, it may stand on the next line
+    CHECK_ERR(skipNewLineBeforeElse(ctx));
+    if (ctx->currentToken.type != TYPE_ELSE)
+    {
+        fprintf(stderr,
+                "Syntax err in line %d: if used as a value needs else\n",
+                ctx->currentToken.line);
+        return ERROR_SYNTAX;
+    }
+    CHECK_ERR(advance(ctx));
+
+    // Else if is another if value inside a block
+    if (ctx->currentToken.type == TYPE_IF)
+    {
+        astNode* inner = NULL;
+        CHECK_ERR(parseIfExpression(ctx, &inner));
+        return wrapInBlock(inner, elseBlock);
+    }
+    return parseValueBranch(ctx, elseBlock);
+}
+
+// Branch of an if value: indented block or one value on the same line
+int parseValueBranch(parcerContext* ctx, astNode** out)
+{
+    if (ctx->currentToken.type == TYPE_EOL)
+    {
+        CHECK_ERR(advance(ctx));
+        return parseBlock(ctx, out);
+    }
+    astNode* value = NULL;
+    CHECK_ERR(parseExpressionOrIf(ctx, &value));
+    return wrapInBlock(value, out);
+}
+
 // End of statement: new line, ; or end of block or file
 int parseStatementEnd(parcerContext* ctx)
 {
@@ -766,7 +841,7 @@ int parseCallArgs(parcerContext* ctx, astNode* call)
     {
         // Each argument becomes a child of the call node
         astNode* arg = NULL;
-        CHECK_ERR(parseExpression(ctx, &arg));
+        CHECK_ERR(parseExpressionOrIf(ctx, &arg));
         CHECK_ERR(appendChild(call, arg));
 
         // No comma means the list is over

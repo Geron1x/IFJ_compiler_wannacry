@@ -1,0 +1,11 @@
+import ifj26.*
+@main def m(): Unit =
+  var x = 0 - 5
+  val absolute = if x < 0 then 0 - x else x
+  val abs2 = if x < 0 then
+    0 - x
+  else
+    x
+  val abs3 = if x < 0 then 0 - x else
+      x
+  print(absolute + abs2 + abs3)
