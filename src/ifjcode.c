@@ -45,6 +45,13 @@ static const astNode* findMainFunction(const astNode* program)
     return NULL;
 }
 
+/** Gives the block with all commands of the function */
+static const astNode* getFunctionBody(const astNode* function)
+{
+    // body is child 0 of the function node
+    return function->children[0];
+}
+
 /** Prints the first lines and calls main */
 static int writeProgramStart(const astNode* mainNode)
 {
@@ -86,6 +93,101 @@ static int writeFunctionExit(const codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Tells if the if has else */
+static bool ifHasElse(const astNode* ifNode)
+{
+    // else is always the third child
+    bool hasThirdChild = (ifNode->childCount > 2);
+
+    return hasThirdChild;
+}
+
+/** Checks if the command puts something on the stack */
+static bool givesValue(const astNode* node)
+{
+    // look what kind of command we got
+    switch (node->nodeType)
+    {
+        // expression gives a value
+        case AST_EXPR_BINARY:
+        case AST_EXPR_UNARY:
+        case AST_EXPR_CALL:
+        case AST_EXPR_VAR:
+        case AST_EXPR_LITERAL:
+        case AST_EXPR_IF:
+            return true;
+
+        // if without else gives nothing
+        case AST_STAT_IF:
+            return ifHasElse(node);
+
+        default:
+            return false;
+    }
+}
+
+/** Prints command from the block */
+static int generateCommand(const astNode* command, codegenContext* context)
+{
+    switch (command->nodeType)
+    {
+        // all kinds of expressions
+        case AST_EXPR_BINARY:
+        case AST_EXPR_UNARY:
+        case AST_EXPR_CALL:
+        case AST_EXPR_VAR:
+        case AST_EXPR_LITERAL:
+        case AST_EXPR_IF:
+            // just put the value on the stack
+            return pushExpression(command, context);
+
+        default:
+            return ERROR_INTERNAL;
+    }
+}
+
+/** Prints all commands of the block */
+static int generateBlock(const astNode* block, codegenContext* context)
+{
+    // not a block - get out of here
+    if (block->nodeType != AST_BLOCK)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    // just counter
+    size_t commandCount = (size_t)block->childCount;
+
+    if (commandCount == 0)
+    {
+        return tryPrint("PUSHS nil@nil\n");
+    }
+
+    // we look for the last one by index
+    size_t lastIndex = commandCount - 1;
+    for (size_t i = 0; i < lastIndex; i++)
+    {
+        const astNode* command = block->children[i];
+        RETURN_IF_ERROR(generateCommand(command, context));
+
+        // clean stack after the command
+        if (givesValue(command) == true)
+        {
+            RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
+        }
+    }
+    // last command is the result of the block
+    const astNode* lastCommand = block->children[lastIndex];
+    RETURN_IF_ERROR(generateCommand(lastCommand, context));
+
+    if (givesValue(lastCommand) == false)
+    {
+        RETURN_IF_ERROR(tryPrint("PUSHS nil@nil\n"));
+    }
+
+    return ERROR_SUCCESS;
+}
+
 /** Prints function */
 static int generateFunction(const astNode* function, codegenContext* context)
 {
@@ -108,8 +210,8 @@ static int generateFunction(const astNode* function, codegenContext* context)
     RETURN_IF_ERROR(defineTempVar(1));
     RETURN_IF_ERROR(defineTempVar(2));
 
-    // todo, body of the func
-    RETURN_IF_ERROR(tryPrint("PUSHS nil@nil\n"));
+    // print all commands of the function
+    RETURN_IF_ERROR(generateBlock(getFunctionBody(function), context));
     RETURN_IF_ERROR(writeFunctionExit(context));
 
     return ERROR_SUCCESS;
