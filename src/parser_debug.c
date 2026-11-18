@@ -9,10 +9,12 @@
 
 // Names in the same order as the enums in ast.h and symtable.h
 static const char* const nodeNames[] = {
-    "PROG",   "FUNC",   "BLOCK", "VAR",  "SET",      "IF",     "WHILE",
-    "RETURN", "BINARY", "UNARY", "CALL", "VAR_EXPR", "LITERAL"};
+    "PROG",  "FUNC",  "BLOCK",    "VAR",     "SET",
+    "IF",    "WHILE", "RETURN",   "FOR",     "BINARY",
+    "UNARY", "CALL",  "VAR_EXPR", "LITERAL", "IF_EXPR"};
 static const char* const opNames[] = {
-    "+", "-", "*", "/", "==", "!=", "<", ">", "<=", ">=", "neg", "pos"};
+    "+",  "-",  "*",   "/",   "==", "!=", "<", ">",
+    "<=", ">=", "neg", "pos", "!",  "&&", "||"};
 static const char* const typeNames[] = {"Unit",    "Int", "Double", "String",
                                         "Boolean", "Any", "Unknown"};
 
