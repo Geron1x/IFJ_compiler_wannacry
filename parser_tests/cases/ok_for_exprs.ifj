@@ -1,0 +1,11 @@
+import ifj26.*
+def f(x: Int): Int =
+  return x * 2
+@main def m(): Unit =
+  val a = 1
+  val b = 3
+  val to = 2
+  for i <- a + 1 to f(b) * 2 by 0 - 1 do
+    for k <- i until i + 2 do print(k)
+  if a < b then
+    for t <- to to to + 1 do print(t)

@@ -279,6 +279,13 @@ static int precReduce(PrecStack* stack, int line)
     return err;
 }
 
+// True if the name is a word of a for range: to, until or by
+static bool isRangeWord(const char* name)
+{
+    return strcmp(name, "to") == 0 || strcmp(name, "until") == 0 ||
+           strcmp(name, "by") == 0;
+}
+
 // Find the group of the current token, for ( the caller must peek first
 // expectOperand tells if + and - are unary here
 static PrecSymbol precClassify(parcerContext* ctx, int depth,
@@ -321,8 +328,13 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         // Extra closing parenthesis belongs to the caller
         case TYPE_RIGHT_PAREN:
             return (depth > 0) ? PS_RPAREN : PS_END;
-        // Names and literals, including true and false
+        // Words to, until and by after a value end it, they start a range
         case TYPE_IDENTIFIER:
+            return (!expectOperand &&
+                    isRangeWord(ctx->currentToken.value.identifier))
+                       ? PS_END
+                       : PS_OPERAND;
+        // Literals, including true and false
         case TYPE_INT_LITERAL:
         case TYPE_DOUBLE_LITERAL:
         case TYPE_STRING_LITERAL:
