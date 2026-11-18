@@ -24,6 +24,8 @@ typedef enum
     S_TYPE_STRING,
     S_TYPE_BOOL,
     S_TYPE_ANY,
+    S_TYPE_FUNC,
+    S_TYPE_LIST,
     S_TYPE_UNKNOWN
 } dataType;
 
@@ -37,6 +39,37 @@ typedef enum
 typedef struct astNode astNode;
 typedef struct symtable symtable;
 typedef struct nodeData nodeData;
+typedef struct typeDesc typeDesc;
+
+
+/**
+ * @brief Get the return type descriptor of a function
+ */
+const typeDesc* symtableGetFuncReturnTypeDesc(symtable* table, const char* key);
+/**
+ * @brief Set the return type descriptor of a function
+ */
+int symtableSetFuncReturnTypeDesc(symtable* table, const char* key,
+                                  const typeDesc* desc);
+/**
+ * @brief Get a function parameter type descriptor by index
+ */
+const typeDesc* symtableGetFuncParamTypeDesc(symtable* table, const char* key,
+                                             int index);
+/**
+ * @brief Set a function parameter type descriptor by index
+ */
+int symtableSetFuncParamTypeDesc(symtable* table, const char* key, int index,
+                                 const typeDesc* desc);
+/**
+ * @brief Get the type descriptor of a variable
+ */
+const typeDesc* symtableGetVarTypeDesc(symtable* table, const char* key);
+/**
+ * @brief Set the type descriptor of a variable
+ */
+int symtableSetVarTypeDesc(symtable* table, const char* key,
+                           const typeDesc* desc);
 
 
 /**
@@ -99,6 +132,7 @@ bool symtableGetIsVarConst(symtable* symtable, const char* key);
  */
 dataType symtableGetFuncReturn(symtable* symtable, const char* key);
 
+/** - SETTERS/GETTERS */
 
 /**
  * @brief Opens new scope for local variables

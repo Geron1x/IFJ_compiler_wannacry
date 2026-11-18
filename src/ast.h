@@ -34,9 +34,15 @@ typedef enum astnodetype
     AST_EXPR_CALL,
     AST_EXPR_VAR,
     AST_EXPR_LITERAL,
-    AST_EXPR_IF
-    /** ADD OTHER TYPES WITH EXTENTIONS */
+    AST_EXPR_IF,
+    AST_EXPR_LAMBDA,
+    AST_EXPR_LIST_LITERAL,
+    AST_EXPR_MEMBER,
+    AST_EXPR_RANGE,
+    AST_EXPR_CALL_EXPR,
+    AST_STAT_FOR_EACH  // for x <- lst do ...
 } astNodeType;
+
 
 /** Operators stored in expression nodes */
 typedef enum astoptype
@@ -59,8 +65,32 @@ typedef enum astoptype
 
     AST_OP_NOT,
     AST_OP_AND,
-    AST_OP_OR
+    AST_OP_OR,
+
+    AST_OP_CONCAT
 } astOpType;
+
+
+typedef struct typeDesc typeDesc;
+
+typeDesc* typeCreatePrimitive(dataType kind);
+typeDesc* typeCreateList(typeDesc* elemType);
+typeDesc* typeCreateFunc(int paramCount, typeDesc** paramTypes,
+                         typeDesc* returnType);
+typeDesc* typeDescClone(const typeDesc* src);
+bool typeDescEquals(const typeDesc* a, const typeDesc* b);
+void typeDescDestroy(typeDesc* desc);
+
+int astCreateLambda(dataType retType, typeDesc* retTypeDesc, astNode* body,
+                    astNode** retNode);
+int astCreateListLiteral(astNode** retNode);
+int astCreateMember(const char* name, astNode* receiver, bool hasArgs,
+                    astNode** retNode);
+int astCreateRange(astNode* from, astNode* end, astNode* step, bool isInclusive,
+                   astNode** retNode);
+int astCreateCallExpr(astNode* calleeExpr, astNode** retNode);
+int astCreateForEach(const char* key, astNode* iterableExpr, astNode* body,
+                     astNode** retNode);
 
 /**
  * @brief Creates a main node Prog which stores every function node as a
