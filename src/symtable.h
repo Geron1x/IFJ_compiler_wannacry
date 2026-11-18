@@ -11,10 +11,10 @@
 #ifndef SYMTABLE_H
 #define SYMTABLE_H
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "bst.h"
 #include "error.h"
-
 /** Types stored in the semantic symbol table */
 typedef enum
 {
@@ -51,6 +51,11 @@ int symtableGetFuncParamCount(symtable* table, const char* key);
  * @brief Returns the type of a function parameter
  */
 dataType symtableGetFuncParamType(symtable* table, const char* key, int index);
+/**
+ * @brief Returns an id (instance counter number) of variable from passed
+ * variable name (key)
+ */
+size_t symtableGetVarId(symtable* symtable, const char* key);
 /**
  * @brief Returns whether a function is being analyzed
  * (flag to identify recurion)
@@ -98,7 +103,7 @@ dataType symtableGetFuncReturn(symtable* symtable, const char* key);
 /**
  * @brief Opens new scope for local variables
  */
-Errors stackPush(symtable* symtable);
+int stackPush(symtable* symtable);
 
 /**
  * @brief Pops top scope and deletes all the variables inside
@@ -109,8 +114,8 @@ void stackPop(symtable* symtable);
  * @brief Inserts a variable into current scope (local tree), can give
  * redifinition feedback error code
  */
-Errors stackInsertVar(symtable* symtable, const char* key, dataType type,
-                      bool isConst);
+int stackInsertVar(symtable* symtable, const char* key, dataType type,
+                   bool isConst);
 
 /**
  * @brief Destructor to clear all scopes present in symtable
@@ -125,20 +130,20 @@ void eraseData(nodeData* data);
 /**
  * @brief Initialize all basic functions into symtable
  */
-Errors symtableBaseFuncInit(symtable* funcTable);
+int symtableBaseFuncInit(symtable* funcTable);
 
 /**
  * @brief Inserts function into symtable,
  * can give redifinition feedback error code
  */
-Errors symtableInsertFunc(symtable* symtable, const char* key,
-                          dataType returnType, int paramCount,
-                          const dataType* paramType, astNode* funcNode);
+int symtableInsertFunc(symtable* symtable, const char* key, dataType returnType,
+                       int paramCount, const dataType* paramType,
+                       astNode* funcNode);
 
 /**
  * @brief Initialize symtable
  */
-Errors symtableInit(symtable** symtable);
+int symtableInit(symtable** symtable);
 
 /**
  * @brief Destructor for symtable
