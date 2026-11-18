@@ -28,11 +28,13 @@ typedef enum astnodetype
     AST_STAT_IF,
     AST_STAT_WHILE,
     AST_STAT_RETURN,
+    AST_STAT_FOR,
     AST_EXPR_BINARY,
     AST_EXPR_UNARY,
     AST_EXPR_CALL,
     AST_EXPR_VAR,
-    AST_EXPR_LITERAL
+    AST_EXPR_LITERAL,
+    AST_EXPR_IF
     /** ADD OTHER TYPES WITH EXTENTIONS */
 } astNodeType;
 
@@ -61,90 +63,103 @@ typedef enum astoptype
 } astOpType;
 
 /**
- * @brief Create a main node Prog which stores every function node as a
+ * @brief Creates a main node Prog which stores every function node as a
  * child (AST_PROG)
  */
-Errors astCreateProgram(astNode** progNode);
+int astCreateProgram(astNode** progNode);
 /**
  * @brief Creates a node to group statements into a single
  * scope (AST_BLOCK)
  */
-Errors astCreateBlock(astNode** block);
+int astCreateBlock(astNode** block);
 
 /**
  * @brief Make the statement (could be expression or some statement) node a part
  * (child) of the block node (statement is placed into the children array of
  * block node)
  */
-Errors astBlockAppend(astNode* block, astNode* statement);
+int astBlockAppend(astNode* block, astNode* statement);
 /**
- * @brief Create a node to express if block (AST_STAT_IF)
+ * @brief Creates a node to express if block (AST_STAT_IF)
  */
-Errors astCreateIf(astNode* condition, astNode* thenBlock, astNode* elseBlock,
-                   astNode** retNode);
+int astCreateIf(astNode* condition, astNode* thenBlock, astNode* elseBlock,
+                astNode** retNode);
 /**
- * @brief Create a node to express while block (AST_STAT_WHILE)
+ * @brief Creates a node to express while block (AST_STAT_WHILE)
  */
-Errors astCreateWhile(astNode* condition, astNode* body, astNode** retNode);
+int astCreateWhile(astNode* condition, astNode* body, astNode** retNode);
 /**
- * @brief Create a node to define a function (AST_FUNC)
+ * @brief Creates a node to define a function (AST_FUNC)
  */
-Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
-                        astNode** retNode, bool isMain);
+int astCreateFuncDef(const char* key, dataType retType, astNode* body,
+                     astNode** retNode, bool isMain);
 /**
- * @brief Create a node to define a variable or const (AST_STAT_VAR)
+ * @brief Creates a node to define a variable or const (AST_STAT_VAR)
  */
-Errors astCreateVarDef(const char* key, dataType type, bool isConst,
-                       astNode* expr, astNode** retNode);
+int astCreateVarDef(const char* key, dataType type, bool isConst, astNode* expr,
+                    astNode** retNode);
 /**
- * @brief Create a node to return
+ * @brief Creates a node to return
  * a value (or Unit) from a function (AST_STAT_RETURN)
  */
-Errors astCreateReturn(astNode* expr, astNode** retNode);
+int astCreateReturn(astNode* expr, astNode** retNode);
 /**
- * @brief Create a node to assign a value into a variable (AST_STAT_SET)
+ * @brief Creates a node to assign a value into a variable (AST_STAT_SET)
  */
-Errors astCreateSetter(const char* key, astNode* expr, astNode** retNode);
+int astCreateSetter(const char* key, astNode* expr, astNode** retNode);
+/**
+ * @brief Creates a node to express a for loop block (AST_STAT_FOR)
+ */
+int astCreateFor(const char* key, astNode* from, astNode* end, astNode* step,
+                 bool isInclusive, astNode* body, int intVal,
+                 astNode** retNode);
+
 
 /**
- * @brief Create a node of unary operation (AST_EXPR_UNARY)
+ * @brief Creates a node of unary operation (AST_EXPR_UNARY)
  */
-Errors astCreateUnary(astOpType op, astNode* operand, astNode** retNode);
+int astCreateUnary(astOpType op, astNode* operand, astNode** retNode);
 /**
- * @brief Create a node of binary operation (AST_EXPR_BINARY)
+ * @brief Creates a node of binary operation (AST_EXPR_BINARY)
  */
-Errors astCreateBinary(astOpType op, astNode* left, astNode* right,
-                       astNode** retNode);
+int astCreateBinary(astOpType op, astNode* left, astNode* right,
+                    astNode** retNode);
 
 /**
- * @brief Create a function call node (AST_EXPR_CALL)
+ * @brief Creates a function call node (AST_EXPR_CALL)
  */
-Errors astCreateCall(const char* key, astNode** retNode);
+int astCreateCall(const char* key, astNode** retNode);
 /**
- * @brief Create a node to interact with variable (AST_EXPR_VAR)
+ * @brief Creates a node to interact with variable (AST_EXPR_VAR)
  */
-Errors astCreateVarExpr(const char* key, astNode** retNode);
+int astCreateVarExpr(const char* key, astNode** retNode);
+/**
+ * @brief Creates an if expression (CONTROL extension) (AST_EXPR_IF)
+ */
+int astCreateIfExpr(astNode* condition, astNode* thenBlock, astNode* elseBlock,
+                    astNode** retNode);
 
 /**
- * @brief Create a literal node with type Int (AST_EXPR_LITERAL)
+ * @brief Creates a literal node with type Int (AST_EXPR_LITERAL)
  */
-Errors astCreateLiteralInt(int val, astNode** retNode);
+int astCreateLiteralInt(int val,
+                        astNode** retNode); /** CHANGE TO LONG LONG INT */
 /**
- * @brief Create a literal node with type Double (AST_EXPR_LITERAL)
+ * @brief Creates a literal node with type Double (AST_EXPR_LITERAL)
  */
-Errors astCreateLiteralDouble(double val, astNode** retNode);
+int astCreateLiteralDouble(double val, astNode** retNode);
 /**
- * @brief Create a literal node with type String (AST_EXPR_LITERAL)
+ * @brief Creates a literal node with type String (AST_EXPR_LITERAL)
  */
-Errors astCreateLiteralString(const char* str, astNode** retNode);
+int astCreateLiteralString(const char* str, astNode** retNode);
 /**
- * @brief Create a literal node with type Bool (AST_EXPR_LITERAL)
+ * @brief Creates a literal node with type Bool (AST_EXPR_LITERAL)
  */
-Errors astCreateLiteralBool(bool val, astNode** retNode);
+int astCreateLiteralBool(bool val, astNode** retNode);
 /**
- * @brief Create a literal node with type Unit (AST_EXPR_LITERAL)
+ * @brief Creates a literal node with type Unit (AST_EXPR_LITERAL)
  */
-Errors astCreateLiteralUnit(astNode** retNode);
+int astCreateLiteralUnit(astNode** retNode);
 
 /**
  * @brief Destructor for the node and all dependent on it

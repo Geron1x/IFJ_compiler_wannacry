@@ -36,7 +36,7 @@ static void astInitNode(astNode* node, astNodeType nodeType, dataType retType)
     node->childCapacity = 0;
 }
 
-static Errors expand(astNode* node)
+static int expand(astNode* node)
 {
     if (node == NULL)
     {
@@ -63,7 +63,7 @@ static Errors expand(astNode* node)
 }
 
 
-Errors astCreateProgram(astNode** progNode)
+int astCreateProgram(astNode** progNode)
 {
     if (progNode == NULL)
     {
@@ -80,7 +80,7 @@ Errors astCreateProgram(astNode** progNode)
     return 0;
 }
 
-Errors astCreateBlock(astNode** block)
+int astCreateBlock(astNode** block)
 {
     if (block == NULL)
     {
@@ -97,7 +97,7 @@ Errors astCreateBlock(astNode** block)
     astInitNode(*block, AST_BLOCK, S_TYPE_UNIT);
     return 0;
 }
-Errors astBlockAppend(astNode* block, astNode* statement)
+int astBlockAppend(astNode* block, astNode* statement)
 {
     if (block == NULL || statement == NULL)
     {
@@ -118,8 +118,8 @@ Errors astBlockAppend(astNode* block, astNode* statement)
 
     return 0;
 }
-Errors astCreateVarDef(const char* key, dataType type, bool isConst,
-                       astNode* expr, astNode** retNode)
+int astCreateVarDef(const char* key, dataType type, bool isConst, astNode* expr,
+                    astNode** retNode)
 {
     if (key == NULL || retNode == NULL)
     {
@@ -131,7 +131,7 @@ Errors astCreateVarDef(const char* key, dataType type, bool isConst,
         return ERROR_INTERNAL;
     }
     astInitNode(*retNode, AST_STAT_VAR, type);
-
+    (*retNode)->data.varData.id = 0;
     (*retNode)->data.varData.key = malloc(sizeof(char) * (strlen(key) + 1));
 
     if ((*retNode)->data.varData.key == NULL)
@@ -157,8 +157,8 @@ Errors astCreateVarDef(const char* key, dataType type, bool isConst,
 
     return 0;
 }
-Errors astCreateIf(astNode* condition, astNode* thenBlock, astNode* elseBlock,
-                   astNode** retNode)
+int astCreateIf(astNode* condition, astNode* thenBlock, astNode* elseBlock,
+                astNode** retNode)
 {
     if (retNode == NULL || condition == NULL || thenBlock == NULL)
     {
@@ -201,7 +201,7 @@ Errors astCreateIf(astNode* condition, astNode* thenBlock, astNode* elseBlock,
     return 0;
 }
 
-Errors astCreateWhile(astNode* condition, astNode* body, astNode** retNode)
+int astCreateWhile(astNode* condition, astNode* body, astNode** retNode)
 {
     if (condition == NULL || retNode == NULL || body == NULL)
     {
@@ -231,9 +231,74 @@ Errors astCreateWhile(astNode* condition, astNode* body, astNode** retNode)
 
     return 0;
 }
-
-Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
-                        astNode** retNode, bool isMain)
+int astCreateFor(const char* key, astNode* from, astNode* end, astNode* step,
+                 bool isInclusive, astNode* body, int intVal, astNode** retNode)
+{
+    if (retNode == NULL || key == NULL || from == NULL || end == NULL ||
+        body == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+    astInitNode(*retNode, AST_STAT_FOR, S_TYPE_UNIT);
+    (*retNode)->data.varData.id = 0;
+    (*retNode)->data.forData.key = malloc(sizeof(char) * (strlen(key) + 1));
+    if ((*retNode)->data.forData.key == NULL)
+    {
+        free((*retNode));
+        *retNode = NULL;
+        return ERROR_INTERNAL;
+    }
+    strcpy((*retNode)->data.forData.key, key);
+    (*retNode)->data.forData.isInclusive = isInclusive;
+    (*retNode)->data.forData.intVal = intVal;
+    (*retNode)->data.forData.hasStep = (step != NULL);
+    Errors status = astBlockAppend(*retNode, from);
+    if (status != 0)
+    {
+        free((*retNode)->data.forData.key);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+    status = astBlockAppend(*retNode, end);
+    if (status != 0)
+    {
+        free((*retNode)->data.forData.key);
+        free((*retNode)->children);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+    status = astBlockAppend(*retNode, body);
+    if (status != 0)
+    {
+        free((*retNode)->data.forData.key);
+        free((*retNode)->children);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+    if (step != NULL)
+    {
+        status = astBlockAppend(*retNode, step);
+        if (status != 0)
+        {
+            free((*retNode)->data.forData.key);
+            free((*retNode)->children);
+            free(*retNode);
+            *retNode = NULL;
+            return ERROR_INTERNAL;
+        }
+    }
+    return 0;
+}
+int astCreateFuncDef(const char* key, dataType retType, astNode* body,
+                     astNode** retNode, bool isMain)
 {
     if (key == NULL || body == NULL || retNode == NULL)
     {
@@ -267,7 +332,7 @@ Errors astCreateFuncDef(const char* key, dataType retType, astNode* body,
     return 0;
 }
 
-Errors astCreateReturn(astNode* expr, astNode** retNode)
+int astCreateReturn(astNode* expr, astNode** retNode)
 {
     if (retNode == NULL)
     {
@@ -293,7 +358,7 @@ Errors astCreateReturn(astNode* expr, astNode** retNode)
 
     return 0;
 }
-Errors astCreateSetter(const char* key, astNode* expr, astNode** retNode)
+int astCreateSetter(const char* key, astNode* expr, astNode** retNode)
 {
     if (key == NULL || expr == NULL || retNode == NULL)
     {
@@ -305,6 +370,7 @@ Errors astCreateSetter(const char* key, astNode* expr, astNode** retNode)
         return ERROR_INTERNAL;
     }
     astInitNode(*retNode, AST_STAT_SET, S_TYPE_UNIT);
+    (*retNode)->data.varData.id = 0;
     (*retNode)->data.varData.key = malloc(sizeof(char) * (strlen(key) + 1));
     if ((*retNode)->data.varData.key == NULL)
     {
@@ -325,7 +391,7 @@ Errors astCreateSetter(const char* key, astNode* expr, astNode** retNode)
     return 0;
 }
 
-Errors astCreateUnary(astOpType op, astNode* operand, astNode** retNode)
+int astCreateUnary(astOpType op, astNode* operand, astNode** retNode)
 {
     if (operand == NULL || retNode == NULL)
     {
@@ -349,8 +415,8 @@ Errors astCreateUnary(astOpType op, astNode* operand, astNode** retNode)
     return 0;
 }
 
-Errors astCreateBinary(astOpType op, astNode* left, astNode* right,
-                       astNode** retNode)
+int astCreateBinary(astOpType op, astNode* left, astNode* right,
+                    astNode** retNode)
 {
     if (left == NULL || right == NULL || retNode == NULL)
     {
@@ -383,8 +449,47 @@ Errors astCreateBinary(astOpType op, astNode* left, astNode* right,
 
     return 0;
 }
+int astCreateIfExpr(astNode* condition, astNode* thenBlock, astNode* elseBlock,
+                    astNode** retNode)
+{
+    if (condition == NULL || thenBlock == NULL || elseBlock == NULL ||
+        retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+    *retNode = malloc(sizeof(astNode));
+    if (*retNode == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+    astInitNode(*retNode, AST_EXPR_IF, S_TYPE_UNKNOWN);
 
-Errors astCreateCall(const char* key, astNode** retNode)
+    Errors status = astBlockAppend(*retNode, condition);
+    if (status != 0)
+    {
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+    status = astBlockAppend(*retNode, thenBlock);
+    if (status != 0)
+    {
+        free((*retNode)->children);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+    status = astBlockAppend(*retNode, elseBlock);
+    if (status != 0)
+    {
+        free((*retNode)->children);
+        free(*retNode);
+        *retNode = NULL;
+        return status;
+    }
+    return 0;
+}
+int astCreateCall(const char* key, astNode** retNode)
 {
     if (key == NULL || retNode == NULL)
     {
@@ -411,7 +516,7 @@ Errors astCreateCall(const char* key, astNode** retNode)
     return 0;
 }
 
-Errors astCreateVarExpr(const char* key, astNode** retNode)
+int astCreateVarExpr(const char* key, astNode** retNode)
 {
     if (key == NULL || retNode == NULL)
     {
@@ -424,7 +529,7 @@ Errors astCreateVarExpr(const char* key, astNode** retNode)
     }
 
     astInitNode(*retNode, AST_EXPR_VAR, S_TYPE_UNKNOWN);
-
+    (*retNode)->data.varData.id = 0;
     (*retNode)->data.varData.key = malloc(sizeof(char) * (strlen(key) + 1));
     if ((*retNode)->data.varData.key == NULL)
     {
@@ -437,7 +542,8 @@ Errors astCreateVarExpr(const char* key, astNode** retNode)
     return 0;
 }
 
-Errors astCreateLiteralInt(int val, astNode** retNode)
+int astCreateLiteralInt(int val,
+                        astNode** retNode) /** CHANGE TO LONG LONG INT */
 {
     if (retNode == NULL)
     {
@@ -456,7 +562,7 @@ Errors astCreateLiteralInt(int val, astNode** retNode)
     return 0;
 }
 
-Errors astCreateLiteralDouble(double val, astNode** retNode)
+int astCreateLiteralDouble(double val, astNode** retNode)
 {
     if (retNode == NULL)
     {
@@ -474,7 +580,7 @@ Errors astCreateLiteralDouble(double val, astNode** retNode)
 
     return 0;
 }
-Errors astCreateLiteralString(const char* str, astNode** retNode)
+int astCreateLiteralString(const char* str, astNode** retNode)
 {
     if (retNode == NULL || str == NULL)
     {
@@ -499,7 +605,7 @@ Errors astCreateLiteralString(const char* str, astNode** retNode)
 
     return 0;
 }
-Errors astCreateLiteralBool(bool val, astNode** retNode)
+int astCreateLiteralBool(bool val, astNode** retNode)
 {
     if (retNode == NULL)
     {
@@ -517,7 +623,7 @@ Errors astCreateLiteralBool(bool val, astNode** retNode)
 
     return 0;
 }
-Errors astCreateLiteralUnit(astNode** retNode)
+int astCreateLiteralUnit(astNode** retNode)
 {
     if (retNode == NULL)
     {
@@ -561,6 +667,10 @@ void astDestroy(astNode* node)
     if (node->nodeType == AST_FUNC || node->nodeType == AST_EXPR_CALL)
     {
         free(node->data.funcData.key);
+    }
+    if (node->nodeType == AST_STAT_FOR)
+    {
+        free(node->data.forData.key);
     }
     free(node);
 }

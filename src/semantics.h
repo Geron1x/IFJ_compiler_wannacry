@@ -18,6 +18,6 @@
  * @brief check the semantics of created ast and decide which types should be
  * placed instead of incomplete types
  */
-Errors semanticsCheck(const astNode* prog);
+int semanticsCheck(const astNode* prog);
 
 #endif

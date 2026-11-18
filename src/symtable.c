@@ -16,11 +16,14 @@
 #include "error.h"
 #include "string.h"
 
+
+#define INSTANCE_NUM_START 1
+
 struct variableData
 {
     dataType type;
     bool isConst;
-    int instanceNum;
+    size_t instanceNum;
 };
 
 struct functionData
@@ -57,14 +60,14 @@ struct symtable
                           lives till the end of semantic analysis */
     scope* top;
     int scopeLevel;
-    int varInstanceCounter; /**< counter to give repeating variable a unique
+    size_t varInstanceCounter; /**< counter to give repeating variable a unique
                                number for them to be distinguishable (enables
                                shadowing) */
 };
 
 static nodeData* stackFindVar(const char* key, symtable* symtable);
 
-Errors symtableBaseFuncInit(symtable* funcTable)
+int symtableBaseFuncInit(symtable* funcTable)
 {
 
     if (funcTable == NULL)
@@ -72,7 +75,7 @@ Errors symtableBaseFuncInit(symtable* funcTable)
         return ERROR_INTERNAL;
     }
     /** setting base values in symtable*/
-    funcTable->varInstanceCounter = 0;
+    funcTable->varInstanceCounter = INSTANCE_NUM_START;
     funcTable->top = NULL;
     funcTable->scopeLevel = 0;
     funcTable->funcTree = NULL;
@@ -202,9 +205,9 @@ Errors symtableBaseFuncInit(symtable* funcTable)
     return status;
 }
 
-Errors symtableInsertFunc(symtable* symtable, const char* key,
-                          dataType returnType, int paramCount,
-                          const dataType* paramType, struct astNode* funcNode)
+int symtableInsertFunc(symtable* symtable, const char* key, dataType returnType,
+                       int paramCount, const dataType* paramType,
+                       struct astNode* funcNode)
 {
     if (symtable == NULL || key == NULL)
     {
@@ -264,7 +267,7 @@ Errors symtableInsertFunc(symtable* symtable, const char* key,
     return 0;
 }
 
-Errors stackPush(symtable* symtable)
+int stackPush(symtable* symtable)
 {
     if (symtable == NULL)
     {
@@ -301,8 +304,8 @@ void stackPop(symtable* symtable)
     }
 }
 
-Errors stackInsertVar(symtable* symtable, const char* key, dataType type,
-                      bool isConst)
+int stackInsertVar(symtable* symtable, const char* key, dataType type,
+                   bool isConst)
 {
     if (symtable == NULL || symtable->top == NULL)
     {
@@ -516,6 +519,15 @@ dataType symtableGetVarType(symtable* symtable, const char* key)
 
     return data->varData.type;
 }
+size_t symtableGetVarId(symtable* symtable, const char* key)
+{
+    nodeData* data = stackFindVar(key, symtable);
+    if (data == NULL || data->type != TYPE_VARIABLE)
+    {
+        return 0;
+    }
+    return (size_t)data->varData.instanceNum;
+}
 
 
 /** -   SETTER GETTER */
@@ -562,7 +574,7 @@ void stackDestroy(symtable* symtable)
     symtable->scopeLevel = 0;
     symtable->top = NULL;
 }
-Errors symtableInit(symtable** symTable)
+int symtableInit(symtable** symTable)
 {
 
     if (symTable == NULL)
@@ -579,7 +591,7 @@ Errors symtableInit(symtable** symTable)
     newTable->funcTree = NULL;
     newTable->top = NULL;
     newTable->scopeLevel = 0;
-    newTable->varInstanceCounter = 0;
+    newTable->varInstanceCounter = INSTANCE_NUM_START;
 
     /** transferring created table into passed argument */
     *symTable = newTable;
@@ -601,7 +613,7 @@ symtable* symtableCreateFuncContext(symtable* globalTable)
     newTable->funcTree = globalTable->funcTree;
     newTable->top = NULL;
     newTable->scopeLevel = 0;
-    newTable->varInstanceCounter = 0;
+    newTable->varInstanceCounter = INSTANCE_NUM_START;
 
     return newTable;
 }
