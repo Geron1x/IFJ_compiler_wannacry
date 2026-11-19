@@ -1,0 +1,5 @@
+import ifj26.*
+def goo(): (Int) => Int =
+  return (a: Int) => a + 1
+@main def main(): Unit =
+  val z = goo()(3,)

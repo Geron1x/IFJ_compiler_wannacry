@@ -1,0 +1,9 @@
+import ifj26.*
+def goo(): (Int) => Int =
+  return (a: Int) => a + 1
+def hoo(): () => (Int) => Int =
+  return () => goo()
+@main def main(): Unit =
+  val z = goo()(3)
+  print(goo()(2) * 2)
+  val w = hoo()()(3)
