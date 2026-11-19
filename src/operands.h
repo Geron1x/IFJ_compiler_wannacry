@@ -153,4 +153,13 @@ int writeVarInstruction(const char* instruction, const char* name,
  */
 int writeJumpLabel(jumpLabelType type, size_t number);
 
+/**
+ * @brief Jumps to label if the value on the stack is false
+ *
+ * @param type
+ * @param number
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeJumpIfFalse(jumpLabelType type, size_t number);
+
 #endif

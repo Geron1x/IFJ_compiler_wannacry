@@ -115,11 +115,9 @@ static bool givesValue(const astNode* node)
         case AST_EXPR_VAR:
         case AST_EXPR_LITERAL:
         case AST_EXPR_IF:
-            return true;
-
-        // if without else gives nothing
+        // if gives a value even without else
         case AST_STAT_IF:
-            return ifHasElse(node);
+            return true;
 
         default:
             return false;
@@ -161,6 +159,50 @@ static int generateReturn(const astNode* command, codegenContext* context)
     return writeFunctionExit(context);
 }
 
+/** Prints all commands of the block */
+static int generateBlock(const astNode* block, codegenContext* context);
+
+/** Prints the whole if */
+static int generateIf(const astNode* ifNode, codegenContext* context)
+{
+    const astNode* condition = ifNode->children[0];
+    const astNode* thenBlock = ifNode->children[1];
+    size_t labelNumber = takeLabelNumber(context);
+
+    // condition goes on stack and false jumps to else part
+    RETURN_IF_ERROR(pushExpression(condition, context));
+    RETURN_IF_ERROR(writeJumpIfFalse(LABEL_IF_ELSE, labelNumber));
+
+    // do the then part
+    RETURN_IF_ERROR(generateBlock(thenBlock, context));
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_IF_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // else part starts here
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_IF_ELSE, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // no else means empty value
+    if (ifHasElse(ifNode) == true)
+    {
+        const astNode* elseBlock = ifNode->children[2];
+        RETURN_IF_ERROR(generateBlock(elseBlock, context));
+    }
+    else
+    {
+        RETURN_IF_ERROR(tryPrint("PUSHS nil@nil\n"));
+    }
+
+    // the whole if ends here
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_IF_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Prints command from the block */
 static int generateCommand(const astNode* command, codegenContext* context)
 {
@@ -183,6 +225,9 @@ static int generateCommand(const astNode* command, codegenContext* context)
 
         case AST_STAT_RETURN:
             return generateReturn(command, context);
+
+        case AST_STAT_IF:
+            return generateIf(command, context);
 
         default:
             return ERROR_INTERNAL;
