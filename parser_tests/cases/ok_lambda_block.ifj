@@ -1,0 +1,11 @@
+import ifj26.*
+def goo(): (Int) => String =
+  return (a: Int) =>
+    val strA = toStr(a)
+    "cislo" + strA
+
+@main def main(): Unit =
+  val f = (a: Int) =>
+    val b = a + 1
+    b * 2
+  print(f(1))

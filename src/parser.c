@@ -62,6 +62,9 @@ int parseParam(parcerContext* ctx, ParamList* params);
 int parseFunctionBody(parcerContext* ctx, astNode** out);
 int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
                   bool isMain, astNode* body, ParamList* params, astNode** out);
+int parseLambdaBody(parcerContext* ctx, astNode** out);
+int buildLambda(astNode* body, ParamList* params, astNode** out);
+int appendParams(astNode* node, ParamList* params);
 int paramListPush(ParamList* list, astNode* param);
 void paramListFree(ParamList* list);
 int wrapInBlock(astNode* node, astNode** out);
@@ -386,18 +389,82 @@ int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
     // Function node owns the return type now
     astSetTypeDesc(func, retDesc);
 
-    // Given parameter is removed from the list, the function owns it now
-    for (size_t i = 0; i < params->count; i++)
+    // Function node takes the parameters
+    err = appendParams(func, params);
+    if (err != ERROR_SUCCESS)
     {
-        err = astBlockAppend(func, params->items[i]);
-        if (err != ERROR_SUCCESS)
-        {
-            astDestroy(func);
-            return err;
-        }
-        params->items[i] = NULL;
+        astDestroy(func);
+        return err;
     }
     *out = func;
+    return ERROR_SUCCESS;
+}
+
+// Lambda after its (: parameters, ), =>, body
+int parseLambda(parcerContext* ctx, astNode** out)
+{
+    // Parameters look like function parameters, each has a type
+    ParamList params = {.items = NULL, .count = 0, .capacity = 0};
+    astNode* body = NULL;
+    int err = parseParams(ctx, &params);
+    if (err == ERROR_SUCCESS) err = match(ctx, TYPE_RIGHT_PAREN);
+    if (err == ERROR_SUCCESS) err = match(ctx, TYPE_ARROW);
+    if (err == ERROR_SUCCESS) err = parseLambdaBody(ctx, &body);
+    if (err == ERROR_SUCCESS) err = buildLambda(body, &params, out);
+
+    // Parameters not given to the lambda are freed here
+    paramListFree(&params);
+    return err;
+}
+
+// Lambda body: indented block after new line, or one value on the same line
+int parseLambdaBody(parcerContext* ctx, astNode** out)
+{
+    if (ctx->currentToken.type == TYPE_EOL)
+    {
+        CHECK_ERR(advance(ctx));
+        return parseBlock(ctx, out);
+    }
+
+    // Semantics wants a block, so one value is wrapped
+    astNode* value = NULL;
+    CHECK_ERR(parseExpressionOrIf(ctx, &value));
+    return wrapInBlock(value, out);
+}
+
+// Lambda node: body first, then the parameters, return type is found by
+// semantics
+int buildLambda(astNode* body, ParamList* params, astNode** out)
+{
+    // On failure the body still belongs to us
+    astNode* lambda = NULL;
+    int err = astCreateLambda(S_TYPE_UNKNOWN, NULL, body, &lambda);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(body);
+        return err;
+    }
+
+    err = appendParams(lambda, params);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(lambda);
+        return err;
+    }
+    *out = lambda;
+    return ERROR_SUCCESS;
+}
+
+// Move every parameter from the list to the node
+int appendParams(astNode* node, ParamList* params)
+{
+    // Given parameter is removed from the list, the node owns it now
+    for (size_t i = 0; i < params->count; i++)
+    {
+        int err = astBlockAppend(node, params->items[i]);
+        if (err != ERROR_SUCCESS) return err;
+        params->items[i] = NULL;
+    }
     return ERROR_SUCCESS;
 }
 

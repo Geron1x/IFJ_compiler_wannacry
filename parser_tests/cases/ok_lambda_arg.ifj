@@ -1,0 +1,6 @@
+import ifj26.*
+def bar(a: Int, f: (Int) => Boolean) = f(a)
+
+@main def main(): Unit =
+  val y = 3
+  print(bar(y, (x: Int) => x > 0))

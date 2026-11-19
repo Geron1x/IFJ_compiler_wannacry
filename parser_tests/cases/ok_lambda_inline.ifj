@@ -1,0 +1,5 @@
+import ifj26.*
+@main def main(): Unit =
+  val positive = (value: Int) => value > 0
+  val add: (Int, Int) => Int = (l: Int, r: Int) => l + r
+  print(add(1, 2))
