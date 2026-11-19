@@ -91,6 +91,27 @@ static int writeLibraryRead(const char* name, const char* type,
     return writeLibraryEnd();
 }
 
+/** Prints function that cuts double to int */
+static int writeLibraryToInt(void)
+{
+    RETURN_IF_ERROR(writeLibraryStart("toInt"));
+
+    RETURN_IF_ERROR(tryPrint("FLOAT2INTS\n"));
+
+    return writeLibraryEnd();
+}
+
+/** Prints function that makes char from number */
+static int writeLibraryChr(void)
+{
+    RETURN_IF_ERROR(writeLibraryStart("chr"));
+
+    // make char from the number on stack
+    RETURN_IF_ERROR(tryPrint("INT2CHARS\n"));
+
+    return writeLibraryEnd();
+}
+
 /** Prints all built-in functions */
 int writeLibrary(void)
 {
@@ -100,6 +121,10 @@ int writeLibrary(void)
     RETURN_IF_ERROR(writeLibraryRead("readInt", "int", "int@0"));
     RETURN_IF_ERROR(writeLibraryRead("readDouble", "float", "float@0x0p+0"));
     RETURN_IF_ERROR(writeLibraryRead("readLine", "string", "string@"));
+
+    RETURN_IF_ERROR(writeLibraryToInt());
+
+    RETURN_IF_ERROR(writeLibraryChr());
 
     return ERROR_SUCCESS;
 }
