@@ -42,18 +42,26 @@ int matchDataType(parcerContext* ctx, dataType* type);
 int takeName(parcerContext* ctx, char** name);
 int checkTrailingComma(parcerContext* ctx, int commaLine);
 
+// Types: simple, list and function
+int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc);
+int parseTypeDesc(parcerContext* ctx, dataType* kind, typeDesc** desc);
+int parseListType(parcerContext* ctx, dataType* kind, typeDesc** desc);
+int parseFuncType(parcerContext* ctx, dataType* kind, typeDesc** desc);
+int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count);
+void typeListFree(typeDesc** list, int count);
+
 // Program, prologue and functions
 int parseProgram(parcerContext* ctx, astNode* prog);
 int parsePrologue(parcerContext* ctx);
 int addFunction(parcerContext* ctx, astNode* prog, bool isMain);
 int parseFunction(parcerContext* ctx, bool isMain, astNode** out);
 int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
-                       astNode** body);
+                       typeDesc** retDesc, astNode** body);
 int parseParams(parcerContext* ctx, ParamList* params);
 int parseParam(parcerContext* ctx, ParamList* params);
 int parseFunctionBody(parcerContext* ctx, astNode** out);
-int buildFunction(const char* name, dataType retType, bool isMain,
-                  astNode* body, ParamList* params, astNode** out);
+int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
+                  bool isMain, astNode* body, ParamList* params, astNode** out);
 int paramListPush(ParamList* list, astNode* param);
 void paramListFree(ParamList* list);
 int wrapInBlock(astNode* node, astNode** out);
@@ -64,7 +72,8 @@ int parseBlockStatements(parcerContext* ctx, astNode* block);
 int parseStatement(parcerContext* ctx, astNode** out);
 int parseValue(parcerContext* ctx, astNode** out);
 int parseVariable(parcerContext* ctx, astNode** out);
-int parseTypeAndValue(parcerContext* ctx, dataType* type, astNode** expr);
+int parseTypeAndValue(parcerContext* ctx, dataType* type, typeDesc** desc,
+                      astNode** expr);
 int parseAssignment(parcerContext* ctx, astNode** out);
 int parseReturn(parcerContext* ctx, astNode** out);
 int parseIf(parcerContext* ctx, astNode** out);
@@ -234,13 +243,19 @@ int parseFunction(parcerContext* ctx, bool isMain, astNode** out)
     // Without a written return type the semantics finds it out
     ParamList params = {.items = NULL, .count = 0, .capacity = 0};
     dataType retType = S_TYPE_UNKNOWN;
+    typeDesc* retDesc = NULL;
     astNode* body = NULL;
-    int err = parseFunctionParts(ctx, &params, &retType, &body);
+    int err = parseFunctionParts(ctx, &params, &retType, &retDesc, &body);
 
-    // Function node takes the body and the parameters
+    // Function node takes the body, the parameters and the return type
     if (err == ERROR_SUCCESS)
     {
-        err = buildFunction(name, retType, isMain, body, &params, out);
+        err = buildFunction(name, retType, retDesc, isMain, body, &params, out);
+    }
+    // Return type not given to the function is freed here
+    else
+    {
+        typeDescDestroy(retDesc);
     }
 
     // Parameters not given to the function are freed here
@@ -251,7 +266,7 @@ int parseFunction(parcerContext* ctx, bool isMain, astNode** out)
 
 // Parameters in parentheses, optional return type, = and the body
 int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
-                       astNode** body)
+                       typeDesc** retDesc, astNode** body)
 {
     CHECK_ERR(match(ctx, TYPE_LEFT_PAREN));
     CHECK_ERR(parseParams(ctx, params));
@@ -261,7 +276,7 @@ int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
     if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
         CHECK_ERR(advance(ctx));
-        CHECK_ERR(matchDataType(ctx, retType));
+        CHECK_ERR(parseType(ctx, retType, retDesc));
     }
 
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
@@ -302,8 +317,9 @@ int parseParam(parcerContext* ctx, ParamList* params)
     CHECK_ERR(takeName(ctx, &name));
 
     dataType type = S_TYPE_UNKNOWN;
+    typeDesc* desc = NULL;
     int err = match(ctx, TYPE_DOUBLE_DOT);
-    if (err == ERROR_SUCCESS) err = matchDataType(ctx, &type);
+    if (err == ERROR_SUCCESS) err = parseType(ctx, &type, &desc);
 
     // Parameter is a constant without a value
     astNode* param = NULL;
@@ -311,8 +327,15 @@ int parseParam(parcerContext* ctx, ParamList* params)
     {
         err = astCreateVarDef(name, type, true, NULL, &param);
     }
-    if (err == ERROR_SUCCESS) err = paramListPush(params, param);
+    // Node takes the type, then goes to the list
+    if (err == ERROR_SUCCESS)
+    {
+        astSetTypeDesc(param, desc);
+        desc = NULL;
+        err = paramListPush(params, param);
+    }
 
+    typeDescDestroy(desc);
     free(name);
     return err;
 }
@@ -348,17 +371,20 @@ int parseFunctionBody(parcerContext* ctx, astNode** out)
 }
 
 // Make the function node, then give it the parameters one by one
-int buildFunction(const char* name, dataType retType, bool isMain,
-                  astNode* body, ParamList* params, astNode** out)
+int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
+                  bool isMain, astNode* body, ParamList* params, astNode** out)
 {
-    // On failure the body still belongs to us
+    // On failure the body and the return type still belong to us
     astNode* func = NULL;
     int err = astCreateFuncDef(name, retType, body, &func, isMain);
     if (err != ERROR_SUCCESS)
     {
         astDestroy(body);
+        typeDescDestroy(retDesc);
         return err;
     }
+    // Function node owns the return type now
+    astSetTypeDesc(func, retDesc);
 
     // Given parameter is removed from the list, the function owns it now
     for (size_t i = 0; i < params->count; i++)
@@ -540,15 +566,23 @@ int parseValue(parcerContext* ctx, astNode** out)
 
     // Without a written type the semantics finds it out
     dataType type = S_TYPE_UNKNOWN;
+    typeDesc* desc = NULL;
     astNode* expr = NULL;
-    int err = parseTypeAndValue(ctx, &type, &expr);
+    int err = parseTypeAndValue(ctx, &type, &desc, &expr);
 
-    // Constant node owns the value, on failure the value is freed here
+    // Constant node owns the value and the type, on failure they are freed here
     if (err == ERROR_SUCCESS)
     {
         err = astCreateVarDef(name, type, true, expr, out);
-        if (err != ERROR_SUCCESS) astDestroy(expr);
+        if (err != ERROR_SUCCESS)
+            astDestroy(expr);
+        else
+        {
+            astSetTypeDesc(*out, desc);
+            desc = NULL;
+        }
     }
+    typeDescDestroy(desc);
     free(name);
     return err;
 }
@@ -563,26 +597,35 @@ int parseVariable(parcerContext* ctx, astNode** out)
 
     // Without a written type the semantics finds it out
     dataType type = S_TYPE_UNKNOWN;
+    typeDesc* desc = NULL;
     astNode* expr = NULL;
-    int err = parseTypeAndValue(ctx, &type, &expr);
+    int err = parseTypeAndValue(ctx, &type, &desc, &expr);
 
-    // Variable node owns the value, on failure the value is freed here
+    // Variable node owns the value and the type, on failure they are freed here
     if (err == ERROR_SUCCESS)
     {
         err = astCreateVarDef(name, type, false, expr, out);
-        if (err != ERROR_SUCCESS) astDestroy(expr);
+        if (err != ERROR_SUCCESS)
+            astDestroy(expr);
+        else
+        {
+            astSetTypeDesc(*out, desc);
+            desc = NULL;
+        }
     }
+    typeDescDestroy(desc);
     free(name);
     return err;
 }
 
 // Optional type after colon, then = and the value
-int parseTypeAndValue(parcerContext* ctx, dataType* type, astNode** expr)
+int parseTypeAndValue(parcerContext* ctx, dataType* type, typeDesc** desc,
+                      astNode** expr)
 {
     if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
         CHECK_ERR(advance(ctx));
-        CHECK_ERR(matchDataType(ctx, type));
+        CHECK_ERR(parseType(ctx, type, desc));
     }
     CHECK_ERR(match(ctx, TYPE_ASSIGNMENT));
     return parseExpressionOrIf(ctx, expr);
@@ -1089,6 +1132,124 @@ int matchDataType(parcerContext* ctx, dataType* type)
     }
     if (type != NULL) *type = found;
     return advance(ctx);
+}
+
+// ============================================================
+// Types
+// ============================================================
+
+// Type after a colon, a simple type keeps no description
+int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc)
+{
+    CHECK_ERR(parseTypeDesc(ctx, kind, desc));
+
+    // Simple type is fully told by its kind
+    if (*kind != S_TYPE_LIST && *kind != S_TYPE_FUNC)
+    {
+        typeDescDestroy(*desc);
+        *desc = NULL;
+    }
+    return ERROR_SUCCESS;
+}
+
+// Any type with a full description, desc is written only on success
+int parseTypeDesc(parcerContext* ctx, dataType* kind, typeDesc** desc)
+{
+    if (ctx->currentToken.type == TYPE_LIST)
+        return parseListType(ctx, kind, desc);
+    if (ctx->currentToken.type == TYPE_LEFT_PAREN)
+        return parseFuncType(ctx, kind, desc);
+
+    // Simple type word
+    CHECK_ERR(matchDataType(ctx, kind));
+    *desc = typeCreatePrimitive(*kind);
+    return (*desc == NULL) ? ERROR_INTERNAL : ERROR_SUCCESS;
+}
+
+// List type: List, [, type of items, ]
+int parseListType(parcerContext* ctx, dataType* kind, typeDesc** desc)
+{
+    CHECK_ERR(advance(ctx));
+    CHECK_ERR(match(ctx, TYPE_LEFT_BRACKET));
+
+    // Item type may be a list or a function too
+    dataType itemKind = S_TYPE_UNKNOWN;
+    typeDesc* item = NULL;
+    CHECK_ERR(parseTypeDesc(ctx, &itemKind, &item));
+    int err = match(ctx, TYPE_RIGHT_BRACKET);
+    if (err != ERROR_SUCCESS)
+    {
+        typeDescDestroy(item);
+        return err;
+    }
+
+    // List description takes the item, on failure it frees it itself
+    *desc = typeCreateList(item);
+    if (*desc == NULL) return ERROR_INTERNAL;
+    *kind = S_TYPE_LIST;
+    return ERROR_SUCCESS;
+}
+
+// Function type: (, parameter types, ), =>, return type
+int parseFuncType(parcerContext* ctx, dataType* kind, typeDesc** desc)
+{
+    CHECK_ERR(advance(ctx));
+
+    // Parameter types until the closing parenthesis
+    typeDesc** params = NULL;
+    int count = 0;
+    int err = parseTypeList(ctx, &params, &count);
+    if (err == ERROR_SUCCESS) err = match(ctx, TYPE_RIGHT_PAREN);
+    if (err == ERROR_SUCCESS) err = match(ctx, TYPE_ARROW);
+
+    // Return type may be a function again
+    dataType retKind = S_TYPE_UNKNOWN;
+    typeDesc* ret = NULL;
+    if (err == ERROR_SUCCESS) err = parseTypeDesc(ctx, &retKind, &ret);
+    if (err != ERROR_SUCCESS)
+    {
+        typeListFree(params, count);
+        return err;
+    }
+
+    // Function description takes all parts, on failure it frees them itself
+    *desc = typeCreateFunc(count, params, ret);
+    if (*desc == NULL) return ERROR_INTERNAL;
+    *kind = S_TYPE_FUNC;
+    return ERROR_SUCCESS;
+}
+
+// Types separated by commas, empty list if ) comes at once
+int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count)
+{
+    if (ctx->currentToken.type == TYPE_RIGHT_PAREN) return ERROR_SUCCESS;
+
+    while (1)
+    {
+        // Parse one type and add it to the end of the array
+        dataType kind = S_TYPE_UNKNOWN;
+        typeDesc* item = NULL;
+        CHECK_ERR(parseTypeDesc(ctx, &kind, &item));
+        typeDesc** grown = realloc(*list, sizeof(typeDesc*) * (*count + 1));
+        if (grown == NULL)
+        {
+            typeDescDestroy(item);
+            return ERROR_INTERNAL;
+        }
+        *list = grown;
+        (*list)[(*count)++] = item;
+
+        // Comma brings one more type
+        if (ctx->currentToken.type != TYPE_COMMA) return ERROR_SUCCESS;
+        CHECK_ERR(advance(ctx));
+    }
+}
+
+// Free every type in the array and the array
+void typeListFree(typeDesc** list, int count)
+{
+    for (int i = 0; i < count; i++) typeDescDestroy(list[i]);
+    free(list);
 }
 
 // Take the name string from the token and move on, the caller frees it
