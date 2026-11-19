@@ -47,9 +47,12 @@ typedef enum
     LABEL_OR_END,    /**< After ||, right side jumps here */
 
     /* Control */
-    LABEL_FOR_CHECK, /**< Before the check, for comes back here */
-    LABEL_FOR_NEXT,  /**< Go to the next number, failed guard jumps here */
-    LABEL_FOR_END    /**< After the loop, false check jumps here */
+    LABEL_FOR_CHECK,   /**< Before the check, for comes back here */
+    LABEL_FOR_NEXT,    /**< Go to the next number, failed guard jumps here */
+    LABEL_FOR_END,     /**< After the loop, false check jumps here */
+    LABEL_FOR_STEP_OK, /**< Step is not zero, loop can start */
+    LABEL_FOR_DOWN,    /**< Step is negative, we check going down */
+    LABEL_FOR_BODY     /**< Check passed, body starts here */
 } jumpLabelType;
 
 /**
@@ -143,6 +146,18 @@ int writeTempInstruction(const char* instruction, size_t number);
  */
 int writeVarInstruction(const char* instruction, const char* name,
                         size_t number);
+
+/**
+ * @brief Prints instruction with a hidden variable of the for
+ *
+ * @param instruction
+ * @param name
+ * @param number
+ * @param part
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeForPartInstruction(const char* instruction, const char* name,
+                            size_t number, const char* part);
 
 /**
  * @brief Prints a label we can jump to

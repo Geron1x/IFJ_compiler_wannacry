@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include "ast_internal.h"
+#include "ifjcode.h"
 #include "operands.h"
 
 /** Gives the next free label number */
@@ -311,6 +312,10 @@ int pushExpression(const astNode* expression, codegenContext* context)
 
         case AST_EXPR_VAR:
             RETURN_IF_ERROR(pushVariable(expression));
+            break;
+
+        case AST_EXPR_IF:
+            RETURN_IF_ERROR(generateIf(expression, context));
             break;
 
         default:
