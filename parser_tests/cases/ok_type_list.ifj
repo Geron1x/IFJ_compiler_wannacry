@@ -1,0 +1,8 @@
+import ifj26.*
+def f(a: List[Int]): List[String] =
+  val b: List[List[Int]] = a
+  var c: List[Boolean] = a
+  a
+
+@main def main(): Unit =
+  print(1)

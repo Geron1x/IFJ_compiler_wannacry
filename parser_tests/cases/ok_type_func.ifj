@@ -1,0 +1,8 @@
+import ifj26.*
+def bar(a: Int, f: (Int) => Boolean) = f(a)
+
+def two(g: (Int, String) => Unit): Unit =
+  g(1, "a")
+
+@main def main(): Unit =
+  print(1)

@@ -1,0 +1,7 @@
+import ifj26.*
+def goo(h: (Int) => (Int) => Int): (Int) => (Int) => Int = h
+
+@main def main(): Unit =
+  val l: List[(Int) => Boolean] = x
+  var m: (List[Int]) => List[Int] = foo
+  print(1)

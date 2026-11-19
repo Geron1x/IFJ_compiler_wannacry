@@ -1,0 +1,5 @@
+import ifj26.*
+def h(g: () => Int) = g()
+
+@main def main(): Unit =
+  print(1)
