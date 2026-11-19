@@ -139,12 +139,86 @@ static int writeConcat(void)
     return ERROR_SUCCESS;
 }
 
+/** Checks if both sides are true, stops early if the left one is false */
+static int pushAnd(const astNode* binary, codegenContext* context)
+{
+    const astNode* left = binary->children[0];
+    const astNode* right = binary->children[1];
+    size_t labelNumber = takeLabelNumber(context);
+
+    // check the left side
+    RETURN_IF_ERROR(pushExpression(left, context));
+    RETURN_IF_ERROR(writeJumpIfFalse(LABEL_AND_FALSE, labelNumber));
+
+    // count the right side
+    RETURN_IF_ERROR(pushExpression(right, context));
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_AND_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // left was false, so the answer is false
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_AND_FALSE, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS bool@false\n"));
+
+    // end
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_AND_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
+/** Checks if at least one side is true, stops early if the left one is true */
+static int pushOr(const astNode* binary, codegenContext* context)
+{
+    const astNode* left = binary->children[0];
+    const astNode* right = binary->children[1];
+    size_t labelNumber = takeLabelNumber(context);
+
+    // check the left side
+    RETURN_IF_ERROR(pushExpression(left, context));
+    RETURN_IF_ERROR(writeJumpIfTrue(LABEL_OR_TRUE, labelNumber));
+
+    // count the right side
+    RETURN_IF_ERROR(pushExpression(right, context));
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_OR_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // left was true, so the answer is true
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_OR_TRUE, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS bool@true\n"));
+
+    // end
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_OR_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Pushes left and right, and after that - does the operation */
 static int pushOperation(const astNode* binary, codegenContext* context)
 {
     // take left and right side of the operation
     const astNode* left = binary->children[0];
     const astNode* right = binary->children[1];
+
+    // AND
+    if (binary->data.opType == AST_OP_AND)
+    {
+        return pushAnd(binary, context);
+    }
+
+    // OR
+    if (binary->data.opType == AST_OP_OR)
+    {
+        return pushOr(binary, context);
+    }
 
     // put left and right on the stack
     RETURN_IF_ERROR(pushExpression(left, context));
@@ -188,6 +262,12 @@ static int pushUnary(const astNode* unary, codegenContext* context)
     if (unary->data.opType == AST_OP_POS)
     {
         return ERROR_SUCCESS;
+    }
+
+    // not just flips the value
+    if (unary->data.opType == AST_OP_NOT)
+    {
+        return tryPrint("NOTS\n");
     }
 
     // just put -1 on stack
