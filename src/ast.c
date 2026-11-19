@@ -28,6 +28,7 @@ static void astInitNode(astNode* node, astNodeType nodeType, dataType retType)
     {
         return;
     }
+    memset(&node->data, 0, sizeof(node->data));
     node->typeInfo = NULL;
     node->int2float = false;
     node->nodeType = nodeType;

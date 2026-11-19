@@ -18,8 +18,24 @@
 #include "error.h"
 #include "symtable.h"
 
-
-static bool isFuncDescCompatible(const typeDesc* expected, astNode* exprNode);
+static dataType checkExprWithExpected(astNode* expr,
+                                      const typeDesc* expectedDesc,
+                                      symtable* globalTable,
+                                      astNode* currentNode, Errors mismatchCode,
+                                      Errors* err);
+static dataType checkMemberExpr(astNode* memberNode, symtable* globalTable,
+                                astNode* currentNode, Errors* err);
+static dataType checkRangeExpr(astNode* rangeNode, symtable* globalTable,
+                               astNode* currentNode, Errors* err);
+static dataType checkCallExprNode(astNode* callExprNode, symtable* globalTable,
+                                  astNode* currentNode, Errors* err);
+static int checkForEach(astNode* forNode, symtable* globalTable,
+                        astNode* currentNode);
+static dataType checkListLiteral(astNode* listNode, symtable* globalTable,
+                                 astNode* currentNode, Errors* err);
+static int resolveEmptyListLiteral(astNode* exprNode,
+                                   const typeDesc* expectedDesc);
+static bool adaptComplexDesc(const typeDesc* expected, astNode* exprNode);
 static dataType checkLambdaExpr(astNode* lambdaNode, symtable* globalTable,
                                 Errors* err);
 static int resolveFuncVarReference(astNode* exprNode,
@@ -32,18 +48,20 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
 static int semanticsFirstPass(const astNode* prog, symtable* globalTable);
 static int semanticsSecondPass(const astNode* prog, symtable* globalTable);
 static int checkBlock(astNode* blockNode, symtable* globalTable,
-                      astNode* currentFunc);
+                      astNode* currentFunc, bool allowTrailingIfExpr,
+                      const typeDesc* expectedRetDesc);
 static int checkFunctionBody(astNode* funcNode, symtable* globalTable);
 
 static int checkStatement(astNode* statNode, symtable* globalTable,
-                          astNode* currentNode, bool isLastInBlock);
+                          astNode* currentNode, bool isLastInExprBlock,
+                          const typeDesc* expectedRetDesc);
 
 static int checkVarDef(astNode* varNode, symtable* globalTable,
                        astNode* currentNode);
 static int checkSet(astNode* setNode, symtable* globalTable,
                     astNode* currentNode);
 static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
-                   bool isLastInBlock);
+                   bool isLastInExprBlock, const typeDesc* expectedRetDesc);
 static int checkWhile(astNode* whileNode, symtable* globalTable,
                       astNode* currentNode);
 static int checkReturn(astNode* returnNode, symtable* globalTable,
@@ -60,7 +78,8 @@ static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
 static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
                               astNode* currentNode, Errors* err);
 static dataType checkIfExpr(astNode* ifNode, symtable* globalTable,
-                            astNode* currentNode, Errors* err);
+                            astNode* currentNode,
+                            const typeDesc* expectedRetDesc, Errors* err);
 /** Run semantic analysis in declaration and body passes */
 int semanticsCheck(const astNode* prog)
 {
@@ -266,7 +285,10 @@ static int checkFunctionBody(astNode* funcNode, symtable* globalTable)
         funcNode->children[i]->data.varData.id = symtableGetVarId(
             globalTable, funcNode->children[i]->data.varData.key);
     }
-    status = checkBlock(funcNode->children[0], globalTable, funcNode);
+    const typeDesc* declaredDesc =
+        symtableGetFuncReturnTypeDesc(globalTable, funcNode->data.funcData.key);
+    status = checkBlock(funcNode->children[0], globalTable, funcNode, true,
+                        declaredDesc);
     stackDestroy(globalTable);
     if (status != 0)
     {
@@ -291,6 +313,26 @@ static int checkFunctionBody(astNode* funcNode, symtable* globalTable)
         funcNode->retType = actualBodyType;
         symtableSetFuncReturn(globalTable, funcNode->data.funcData.key,
                               actualBodyType);
+        if (actualBodyType == S_TYPE_LIST || actualBodyType == S_TYPE_FUNC)
+        {
+            astNode* last = funcNode->children[0];
+            if (last != NULL && last->nodeType == AST_BLOCK &&
+                last->childCount > 0)
+            {
+                last = last->children[last->childCount - 1];
+            }
+            if (last != NULL && last->typeInfo != NULL)
+            {
+                typeDescDestroy(funcNode->typeInfo);
+                funcNode->typeInfo = typeDescClone(last->typeInfo);
+                status = symtableSetFuncReturnTypeDesc(
+                    globalTable, funcNode->data.funcData.key, last->typeInfo);
+                if (status != 0)
+                {
+                    return status;
+                }
+            }
+        }
     }
     else if (declaredType != actualBodyType)
     {
@@ -309,6 +351,25 @@ static int checkFunctionBody(astNode* funcNode, symtable* globalTable)
             }
         }
         else
+        {
+            return ERROR_TYPE_MISMATCH;
+        }
+    }
+
+    bool bodyAllReturn = false;
+    bool bodyAllUnit = false;
+    analyzeEnd(funcNode->children[0], &bodyAllReturn, &bodyAllUnit);
+
+    if (declaredDesc != NULL && actualBodyType != S_TYPE_UNIT && !bodyAllReturn)
+    {
+        astNode* last = funcNode->children[0];
+        if (last != NULL && last->nodeType == AST_BLOCK && last->childCount > 0)
+        {
+            last = last->children[last->childCount - 1];
+        }
+        if (last != NULL &&
+            (declaredType == S_TYPE_LIST || declaredType == S_TYPE_FUNC) &&
+            !adaptComplexDesc(declaredDesc, last))
         {
             return ERROR_TYPE_MISMATCH;
         }
@@ -352,6 +413,7 @@ static void analyzeEnd(astNode* node, bool* allReturn, bool* allUnit)
         case AST_STAT_SET:
         case AST_STAT_WHILE:
         case AST_STAT_FOR:
+        case AST_STAT_FOR_EACH:
             *allReturn = false;
             *allUnit = true;
             return;
@@ -361,6 +423,10 @@ static void analyzeEnd(astNode* node, bool* allReturn, bool* allUnit)
         case AST_EXPR_LITERAL:
         case AST_EXPR_VAR:
         case AST_EXPR_CALL:
+        case AST_EXPR_LAMBDA:
+        case AST_EXPR_LIST_LITERAL:
+        case AST_EXPR_MEMBER:
+        case AST_EXPR_CALL_EXPR:
             *allReturn = false;
             *allUnit = (lastStat->retType == S_TYPE_UNIT);
             return;
@@ -448,6 +514,10 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
         case AST_EXPR_LITERAL:
         case AST_EXPR_VAR:
         case AST_EXPR_CALL:
+        case AST_EXPR_LAMBDA:
+        case AST_EXPR_LIST_LITERAL:
+        case AST_EXPR_MEMBER:
+        case AST_EXPR_CALL_EXPR:
             return lastStat->retType;
         case AST_STAT_IF:
         {
@@ -500,6 +570,7 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
         case AST_STAT_SET:
         case AST_STAT_WHILE:
         case AST_STAT_FOR:
+        case AST_STAT_FOR_EACH:
             return S_TYPE_UNIT;
 
         case AST_STAT_RETURN:
@@ -519,7 +590,8 @@ static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
 
 /** Check all statements in one block */
 static int checkBlock(astNode* blockNode, symtable* globalTable,
-                      astNode* currentFunc)
+                      astNode* currentFunc, bool allowTrailingIfExpr,
+                      const typeDesc* expectedRetDesc)
 {
     if (blockNode == NULL || globalTable == NULL)
     {
@@ -530,8 +602,14 @@ static int checkBlock(astNode* blockNode, symtable* globalTable,
     Errors status = 0;
     for (int i = 0; i < statCount; i++)
     {
-        status = checkStatement(blockNode->children[i], globalTable,
-                                currentFunc, i == statCount - 1);
+        const typeDesc* statementExpectedDesc = NULL;
+        if (allowTrailingIfExpr && i == statCount - 1)
+        {
+            statementExpectedDesc = expectedRetDesc;
+        }
+        status = checkStatement(
+            blockNode->children[i], globalTable, currentFunc,
+            allowTrailingIfExpr && i == statCount - 1, statementExpectedDesc);
         if (status != 0)
         {
             return status;
@@ -541,7 +619,8 @@ static int checkBlock(astNode* blockNode, symtable* globalTable,
     return 0;
 }
 static int checkStatement(astNode* statNode, symtable* globalTable,
-                          astNode* currentNode, bool isLastInBlock)
+                          astNode* currentNode, bool isLastInExprBlock,
+                          const typeDesc* expectedRetDesc)
 {
     Errors status = 0;
     switch (statNode->nodeType)
@@ -553,7 +632,8 @@ static int checkStatement(astNode* statNode, symtable* globalTable,
             status = checkSet(statNode, globalTable, currentNode);
             break;
         case AST_STAT_IF:
-            status = checkIf(statNode, globalTable, currentNode, isLastInBlock);
+            status = checkIf(statNode, globalTable, currentNode,
+                             isLastInExprBlock, expectedRetDesc);
             break;
         case AST_STAT_WHILE:
             status = checkWhile(statNode, globalTable, currentNode);
@@ -567,10 +647,15 @@ static int checkStatement(astNode* statNode, symtable* globalTable,
         case AST_EXPR_VAR:
         case AST_EXPR_CALL:
         case AST_EXPR_IF:
+        case AST_EXPR_LAMBDA:
+        case AST_EXPR_LIST_LITERAL:
+        case AST_EXPR_MEMBER:
+        case AST_EXPR_CALL_EXPR:
         {
             Errors err = 0;
             dataType exprType =
-                checkExpr(statNode, globalTable, currentNode, &err);
+                checkExprWithExpected(statNode, expectedRetDesc, globalTable,
+                                      currentNode, ERROR_TYPE_MISMATCH, &err);
             if (err != 0)
             {
                 return err;
@@ -585,6 +670,8 @@ static int checkStatement(astNode* statNode, symtable* globalTable,
         }
         case AST_STAT_FOR:
             return checkFor(statNode, globalTable, currentNode);
+        case AST_STAT_FOR_EACH:
+            return checkForEach(statNode, globalTable, currentNode);
         default:
             return ERROR_INTERNAL;
     }
@@ -605,29 +692,13 @@ static int checkVarDef(astNode* varNode, symtable* globalTable,
     }
 
     astNode* initExpr = varNode->children[0];
-    dataType type = S_TYPE_UNKNOWN;
     Errors err = 0;
-    /** if initializer is not a local variable check whether it is a regular
-     * function */
-    if (initExpr->nodeType == AST_EXPR_VAR &&
-        initExpr->data.varData.key != NULL &&
-        symtableGetVarType(globalTable, initExpr->data.varData.key) ==
-            S_TYPE_UNKNOWN)
+    dataType type =
+        checkExprWithExpected(initExpr, varNode->typeInfo, globalTable,
+                              currentNode, ERROR_TYPE_MISMATCH, &err);
+    if (err != 0)
     {
-        err = resolveFuncVarReference(initExpr, varNode->typeInfo, globalTable);
-        if (err != 0)
-        {
-            return err;
-        }
-        type = S_TYPE_FUNC;
-    }
-    else
-    {
-        type = checkExpr(initExpr, globalTable, currentNode, &err);
-        if (type == S_TYPE_UNKNOWN)
-        {
-            return (err != 0) ? err : ERROR_TYPE_MISMATCH;
-        }
+        return err;
     }
 
     /** check type compatability */
@@ -638,8 +709,7 @@ static int checkVarDef(astNode* varNode, symtable* globalTable,
             if (varNode->typeInfo != NULL)
             {
                 if (initExpr->typeInfo == NULL ||
-                    (!typeDescEquals(varNode->typeInfo, initExpr->typeInfo) &&
-                     !isFuncDescCompatible(varNode->typeInfo, initExpr)))
+                    !typeDescEquals(varNode->typeInfo, initExpr->typeInfo))
                 {
                     return ERROR_TYPE_MISMATCH;
                 }
@@ -725,9 +795,23 @@ static dataType checkExpr(astNode* exprNode, symtable* globalTable,
             if (exprNode->retType == S_TYPE_UNKNOWN)
             {
                 *err = ERROR_UNDEFINED_NAME;
+                return S_TYPE_UNKNOWN;
             }
             exprNode->data.varData.id =
                 symtableGetVarId(globalTable, exprNode->data.varData.key);
+
+            const typeDesc* varDesc =
+                symtableGetVarTypeDesc(globalTable, exprNode->data.varData.key);
+            if (varDesc != NULL)
+            {
+                typeDescDestroy(exprNode->typeInfo);
+                exprNode->typeInfo = typeDescClone(varDesc);
+                if (exprNode->typeInfo == NULL)
+                {
+                    *err = ERROR_INTERNAL;
+                    return S_TYPE_UNKNOWN;
+                }
+            }
             return exprNode->retType;
         }
         case AST_EXPR_BINARY:
@@ -739,9 +823,17 @@ static dataType checkExpr(astNode* exprNode, symtable* globalTable,
         case AST_EXPR_CALL:
             return checkCallExpr(exprNode, globalTable, currentNode, err);
         case AST_EXPR_IF:
-            return checkIfExpr(exprNode, globalTable, currentNode, err);
+            return checkIfExpr(exprNode, globalTable, currentNode, NULL, err);
         case AST_EXPR_LAMBDA:
             return checkLambdaExpr(exprNode, globalTable, err);
+        case AST_EXPR_LIST_LITERAL:
+            return checkListLiteral(exprNode, globalTable, currentNode, err);
+        case AST_EXPR_MEMBER:
+            return checkMemberExpr(exprNode, globalTable, currentNode, err);
+        case AST_EXPR_RANGE:
+            return checkRangeExpr(exprNode, globalTable, currentNode, err);
+        case AST_EXPR_CALL_EXPR:
+            return checkCallExprNode(exprNode, globalTable, currentNode, err);
         default:
         {
             *err = ERROR_INTERNAL;
@@ -780,26 +872,11 @@ static int checkSet(astNode* setNode, symtable* globalTable,
 
     astNode* expr = setNode->children[0];
 
-    dataType expType = S_TYPE_UNKNOWN;
-
-    if (expr->nodeType == AST_EXPR_VAR && expr->data.varData.key != NULL &&
-        symtableGetVarType(globalTable, expr->data.varData.key) ==
-            S_TYPE_UNKNOWN)
+    dataType expType = checkExprWithExpected(
+        expr, varDesc, globalTable, currentNode, ERROR_TYPE_MISMATCH, &err);
+    if (err != 0)
     {
-        err = resolveFuncVarReference(expr, varDesc, globalTable);
-        if (err != 0)
-        {
-            return err;
-        }
-        expType = S_TYPE_FUNC;
-    }
-    else
-    {
-        expType = checkExpr(expr, globalTable, currentNode, &err);
-        if (expType == S_TYPE_UNKNOWN)
-        {
-            return (err != 0) ? err : ERROR_TYPE_MISMATCH;
-        }
+        return err;
     }
 
     if (type != expType)
@@ -817,7 +894,7 @@ static int checkSet(astNode* setNode, symtable* globalTable,
     {
         if (expr->typeInfo == NULL ||
             (!typeDescEquals(varDesc, expr->typeInfo) &&
-             !isFuncDescCompatible(varDesc, expr)))
+             !adaptComplexDesc(varDesc, expr)))
         {
             return ERROR_TYPE_MISMATCH;
         }
@@ -827,7 +904,7 @@ static int checkSet(astNode* setNode, symtable* globalTable,
 
 
 static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
-                   bool isLastInBlock)
+                   bool isLastInExprBlock, const typeDesc* expectedRetDesc)
 {
     if (ifNode == NULL || currentNode == NULL || ifNode->children[0] == NULL)
     {
@@ -837,9 +914,10 @@ static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
 
     Errors status = 0;
 
-    if (isLastInBlock && ifNode->childCount > 2 && ifNode->children[2] != NULL)
+    if (isLastInExprBlock && ifNode->childCount > 2 &&
+        ifNode->children[2] != NULL)
     {
-        checkIfExpr(ifNode, globalTable, currentNode, &status);
+        checkIfExpr(ifNode, globalTable, currentNode, expectedRetDesc, &status);
         return status;
     }
     /** check condition */
@@ -865,7 +943,8 @@ static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
     {
         return status;
     }
-    status = checkBlock(ifNode->children[1], globalTable, currentNode);
+    status =
+        checkBlock(ifNode->children[1], globalTable, currentNode, false, NULL);
     stackPop(globalTable);
     if (status != 0)
     {
@@ -884,7 +963,8 @@ static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
         {
             return status;
         }
-        status = checkBlock(ifNode->children[2], globalTable, currentNode);
+        status = checkBlock(ifNode->children[2], globalTable, currentNode,
+                            false, NULL);
         stackPop(globalTable);
         if (status != 0)
         {
@@ -923,7 +1003,8 @@ static int checkWhile(astNode* whileNode, symtable* globalTable,
     {
         return status;
     }
-    status = checkBlock(whileNode->children[1], globalTable, currentNode);
+    status = checkBlock(whileNode->children[1], globalTable, currentNode, false,
+                        NULL);
     stackPop(globalTable);
     if (status != 0)
     {
@@ -1011,7 +1092,8 @@ static int checkFor(astNode* forNode, symtable* globalTable,
     forNode->data.forData.id =
         symtableGetVarId(globalTable, forNode->data.forData.key);
     /** check if-guards + for loop body block*/
-    status = checkBlock(forNode->children[2], globalTable, currentNode);
+    status =
+        checkBlock(forNode->children[2], globalTable, currentNode, false, NULL);
     stackPop(globalTable);
     if (status != 0)
     {
@@ -1029,7 +1111,7 @@ static int checkReturn(astNode* returnNode, symtable* globalTable,
     }
     if (currentNode->nodeType == AST_EXPR_LAMBDA)
     {
-        return ERROR_TYPE_MISMATCH;
+        return ERROR_OTHER_SEMANTIC;
     }
 
     if (currentNode->data.funcData.key == NULL)
@@ -1039,7 +1121,7 @@ static int checkReturn(astNode* returnNode, symtable* globalTable,
     dataType expectedType =
         symtableGetFuncReturn(globalTable, currentNode->data.funcData.key);
     dataType type = S_TYPE_UNIT;
-
+    Errors err = 0;
     if (returnNode->childCount > 0 && returnNode->children != NULL &&
         returnNode->children[0] != NULL)
     {
@@ -1047,33 +1129,11 @@ static int checkReturn(astNode* returnNode, symtable* globalTable,
         const typeDesc* expectedDesc = symtableGetFuncReturnTypeDesc(
             globalTable, currentNode->data.funcData.key);
 
-        /** if initializer is not a local variable check whether it is a regular
-         * function */
-        if (retExpr->nodeType == AST_EXPR_VAR &&
-            retExpr->data.varData.key != NULL &&
-            symtableGetVarType(globalTable, retExpr->data.varData.key) ==
-                S_TYPE_UNKNOWN)
+        type = checkExprWithExpected(retExpr, expectedDesc, globalTable,
+                                     currentNode, ERROR_TYPE_MISMATCH, &err);
+        if (err != 0)
         {
-            Errors refErr =
-                resolveFuncVarReference(retExpr, expectedDesc, globalTable);
-            if (refErr != 0)
-            {
-                return refErr;
-            }
-            type = S_TYPE_FUNC;
-        }
-        else
-        {
-            Errors err = 0;
-            type = checkExpr(retExpr, globalTable, currentNode, &err);
-            if (err != 0)
-            {
-                return err;
-            }
-            if (type == S_TYPE_UNKNOWN)
-            {
-                return ERROR_TYPE_MISMATCH;
-            }
+            return err;
         }
 
         /** if function returns unit the actual result of a function does not
@@ -1095,7 +1155,7 @@ static int checkReturn(astNode* returnNode, symtable* globalTable,
 
             if (retExpr->typeInfo == NULL ||
                 (!typeDescEquals(expectedDesc, retExpr->typeInfo) &&
-                 !isFuncDescCompatible(expectedDesc, retExpr)))
+                 !adaptComplexDesc(expectedDesc, retExpr)))
             {
                 return ERROR_TYPE_MISMATCH;
             }
@@ -1119,7 +1179,8 @@ static int checkReturn(astNode* returnNode, symtable* globalTable,
     return 0;
 }
 static dataType checkIfExpr(astNode* ifNode, symtable* globalTable,
-                            astNode* currentNode, Errors* err)
+                            astNode* currentNode,
+                            const typeDesc* expectedRetDesc, Errors* err)
 {
     if (ifNode == NULL || globalTable == NULL || currentNode == NULL ||
         err == NULL || ifNode->childCount < 3 || ifNode->children == NULL ||
@@ -1154,7 +1215,8 @@ static dataType checkIfExpr(astNode* ifNode, symtable* globalTable,
         *err = status;
         return S_TYPE_UNKNOWN;
     }
-    status = checkBlock(ifNode->children[1], globalTable, currentNode);
+    status = checkBlock(ifNode->children[1], globalTable, currentNode, true,
+                        expectedRetDesc);
     stackPop(globalTable);
     if (status != 0)
     {
@@ -1169,7 +1231,8 @@ static dataType checkIfExpr(astNode* ifNode, symtable* globalTable,
         *err = status;
         return S_TYPE_UNKNOWN;
     }
-    status = checkBlock(ifNode->children[2], globalTable, currentNode);
+    status = checkBlock(ifNode->children[2], globalTable, currentNode, true,
+                        expectedRetDesc);
     stackPop(globalTable);
     if (status != 0)
     {
@@ -1210,15 +1273,28 @@ static dataType checkIfExpr(astNode* ifNode, symtable* globalTable,
         {
             return S_TYPE_UNKNOWN;
         }
+        if ((ifNode->retType == S_TYPE_LIST ||
+             ifNode->retType == S_TYPE_FUNC) &&
+            elseLast != NULL && elseLast->typeInfo != NULL)
+        {
+            typeDescDestroy(ifNode->typeInfo);
+            ifNode->typeInfo = typeDescClone(elseLast->typeInfo);
+        }
         return ifNode->retType;
     }
     if (elseIsReturn)
     {
-
         ifNode->retType = resolveBodyType(thenBlock, S_TYPE_UNKNOWN, err);
         if (*err != 0)
         {
             return S_TYPE_UNKNOWN;
+        }
+        if ((ifNode->retType == S_TYPE_LIST ||
+             ifNode->retType == S_TYPE_FUNC) &&
+            thenLast != NULL && thenLast->typeInfo != NULL)
+        {
+            typeDescDestroy(ifNode->typeInfo);
+            ifNode->typeInfo = typeDescClone(thenLast->typeInfo);
         }
         return ifNode->retType;
     }
@@ -1238,6 +1314,23 @@ static dataType checkIfExpr(astNode* ifNode, symtable* globalTable,
     dataType resType = S_TYPE_UNKNOWN;
     if (thenType == elseType && thenType != S_TYPE_UNKNOWN)
     {
+        if (thenType == S_TYPE_LIST || thenType == S_TYPE_FUNC)
+        {
+            if (thenLast == NULL || elseLast == NULL ||
+                thenLast->typeInfo == NULL || elseLast->typeInfo == NULL ||
+                !typeDescEquals(thenLast->typeInfo, elseLast->typeInfo))
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+            typeDescDestroy(ifNode->typeInfo);
+            ifNode->typeInfo = typeDescClone(thenLast->typeInfo);
+            if (ifNode->typeInfo == NULL)
+            {
+                *err = ERROR_INTERNAL;
+                return S_TYPE_UNKNOWN;
+            }
+        }
         resType = thenType;
     }
     else if (thenType == S_TYPE_INT && elseType == S_TYPE_DOUBLE)
@@ -1301,6 +1394,28 @@ static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
         }
         biNode->retType = S_TYPE_BOOL;
         return S_TYPE_BOOL;
+    }
+    /** ++ check */
+    if (biNode->data.opType == AST_OP_CONCAT)
+    {
+        if (typeLeft != S_TYPE_LIST || typeRight != S_TYPE_LIST ||
+            biNode->children[0]->typeInfo == NULL ||
+            biNode->children[1]->typeInfo == NULL ||
+            !typeDescEquals(biNode->children[0]->typeInfo,
+                            biNode->children[1]->typeInfo))
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+        typeDescDestroy(biNode->typeInfo);
+        biNode->typeInfo = typeDescClone(biNode->children[0]->typeInfo);
+        if (biNode->typeInfo == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+        biNode->retType = S_TYPE_LIST;
+        return S_TYPE_LIST;
     }
 
     if (typeLeft != typeRight)
@@ -1384,7 +1499,44 @@ static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
     biNode->retType = typeLeft;
     return typeLeft;
 }
+static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
+                               astNode* currentNode, Errors* err)
+{
+    if (uNode == NULL || globalTable == NULL || currentNode == NULL ||
+        err == NULL || uNode->childCount < 1 || uNode->children == NULL ||
+        uNode->children[0] == NULL)
+    {
+        *err = ERROR_INTERNAL;
+        return S_TYPE_UNKNOWN;
+    }
 
+    dataType type =
+        checkExpr(uNode->children[0], globalTable, currentNode, err);
+    if (type == S_TYPE_UNKNOWN || *err != 0)
+    {
+        return S_TYPE_UNKNOWN;
+    }
+
+    if ((uNode->data.opType == AST_OP_NEG ||
+         uNode->data.opType == AST_OP_POS) &&
+        (type == S_TYPE_INT || type == S_TYPE_DOUBLE))
+    {
+        uNode->retType = type;
+        return type;
+    }
+    if (uNode->data.opType == AST_OP_NOT)
+    {
+        if (type == S_TYPE_BOOL)
+        {
+            uNode->retType = S_TYPE_BOOL;
+            return S_TYPE_BOOL;
+        }
+        *err = ERROR_TYPE_MISMATCH;
+        return S_TYPE_UNKNOWN;
+    }
+    *err = ERROR_TYPE_MISMATCH;
+    return S_TYPE_UNKNOWN;
+}
 static dataType checkLambdaExpr(astNode* lambdaNode, symtable* globalTable,
                                 Errors* err)
 {
@@ -1490,7 +1642,7 @@ static dataType checkLambdaExpr(astNode* lambdaNode, symtable* globalTable,
 
     /** check the body of lambda function with address to itself */
     astNode* body = lambdaNode->children[0];
-    status = checkBlock(body, lambdaTable, lambdaNode);
+    status = checkBlock(body, lambdaTable, lambdaNode, true, NULL);
     if (status != 0)
     {
         typeDescArrayDestroy(paramDescs, paramCount);
@@ -1689,6 +1841,49 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
     dataType localVarType = symtableGetVarType(globalTable, callerKey);
     if (localVarType != S_TYPE_UNKNOWN)
     {
+        if (localVarType == S_TYPE_LIST)
+        {
+            if (callNode->childCount != 1)
+            {
+                *err = ERROR_WRONG_ARGUMENTS;
+                return S_TYPE_UNKNOWN;
+            }
+            dataType idxType =
+                checkExpr(callNode->children[0], globalTable, currentNode, err);
+            if (*err != 0)
+            {
+                return S_TYPE_UNKNOWN;
+            }
+            if (idxType != S_TYPE_INT)
+            {
+                *err = ERROR_WRONG_ARGUMENTS;
+                return S_TYPE_UNKNOWN;
+            }
+
+            const typeDesc* listDesc =
+                symtableGetVarTypeDesc(globalTable, callerKey);
+            if (listDesc == NULL || listDesc->type != S_TYPE_LIST ||
+                listDesc->elemType == NULL)
+            {
+                *err = ERROR_INTERNAL;
+                return S_TYPE_UNKNOWN;
+            }
+
+            dataType elemType = listDesc->elemType->type;
+            if (elemType == S_TYPE_LIST || elemType == S_TYPE_FUNC)
+            {
+                typeDescDestroy(callNode->typeInfo);
+                callNode->typeInfo = typeDescClone(listDesc->elemType);
+                if (callNode->typeInfo == NULL)
+                {
+                    *err = ERROR_INTERNAL;
+                    return S_TYPE_UNKNOWN;
+                }
+            }
+            callNode->retType = elemType;
+            return elemType;
+        }
+
         if (localVarType != S_TYPE_FUNC)
         {
             *err = ERROR_TYPE_MISMATCH;
@@ -1713,29 +1908,12 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
         {
             astNode* arg = callNode->children[i];
             const typeDesc* expParam = funcDesc->func.paramTypes[i];
-            dataType argType = S_TYPE_UNKNOWN;
-
-            if (arg->nodeType == AST_EXPR_VAR &&
-                arg->data.varData.key != NULL &&
-                symtableGetVarType(globalTable, arg->data.varData.key) ==
-                    S_TYPE_UNKNOWN)
+            dataType argType =
+                checkExprWithExpected(arg, expParam, globalTable, currentNode,
+                                      ERROR_WRONG_ARGUMENTS, err);
+            if (*err != 0)
             {
-                *err = resolveFuncVarReference(arg, expParam, globalTable);
-                if (*err != 0)
-                {
-                    *err = (*err == ERROR_TYPE_MISMATCH) ? ERROR_WRONG_ARGUMENTS
-                                                         : *err;
-                    return S_TYPE_UNKNOWN;
-                }
-                argType = S_TYPE_FUNC;
-            }
-            else
-            {
-                argType = checkExpr(arg, globalTable, currentNode, err);
-                if (*err != 0)
-                {
-                    return S_TYPE_UNKNOWN;
-                }
+                return S_TYPE_UNKNOWN;
             }
 
             if (expParam->type != S_TYPE_ANY)
@@ -1756,7 +1934,7 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
                 else if ((expParam->type == S_TYPE_FUNC ||
                           expParam->type == S_TYPE_LIST) &&
                          (!typeDescEquals(expParam, arg->typeInfo) &&
-                          !isFuncDescCompatible(expParam, arg)))
+                          !adaptComplexDesc(expParam, arg)))
                 {
                     *err = ERROR_WRONG_ARGUMENTS;
                     return S_TYPE_UNKNOWN;
@@ -1799,30 +1977,12 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
             symtableGetFuncParamType(globalTable, callerKey, i);
         const typeDesc* expectedDesc =
             symtableGetFuncParamTypeDesc(globalTable, callerKey, i);
-        dataType type = S_TYPE_UNKNOWN;
-
-        if (arg->nodeType == AST_EXPR_VAR && arg->data.varData.key != NULL &&
-            symtableGetVarType(globalTable, arg->data.varData.key) ==
-                S_TYPE_UNKNOWN)
+        dataType type =
+            checkExprWithExpected(arg, expectedDesc, globalTable, currentNode,
+                                  ERROR_WRONG_ARGUMENTS, err);
+        if (*err != 0)
         {
-            *err = resolveFuncVarReference(arg, expectedDesc, globalTable);
-            if (*err != 0)
-            {
-                if (*err == ERROR_TYPE_MISMATCH)
-                {
-                    *err = ERROR_WRONG_ARGUMENTS;
-                }
-                return S_TYPE_UNKNOWN;
-            }
-            type = S_TYPE_FUNC;
-        }
-        else
-        {
-            type = checkExpr(arg, globalTable, currentNode, err);
-            if (*err != 0)
-            {
-                return S_TYPE_UNKNOWN;
-            }
+            return S_TYPE_UNKNOWN;
         }
 
         if (expectedType == S_TYPE_ANY)
@@ -1850,7 +2010,7 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
             else if (expectedDesc != NULL)
             {
                 if (arg->typeInfo == NULL ||
-                    !typeDescEquals(expectedDesc, arg->typeInfo))
+                    !adaptComplexDesc(expectedDesc, arg))
                 {
                     *err = ERROR_WRONG_ARGUMENTS;
                     return S_TYPE_UNKNOWN;
@@ -1911,8 +2071,8 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
     return retType;
 }
 
-/** check compatability of functional types + implicit conversion to double */
-static bool isFuncDescCompatible(const typeDesc* expected, astNode* exprNode)
+/** Adapt compatible complex descriptors and mark implicit conversions */
+static bool adaptComplexDesc(const typeDesc* expected, astNode* exprNode)
 {
     if (expected == NULL || exprNode == NULL || exprNode->typeInfo == NULL)
     {
@@ -1959,44 +2119,779 @@ static bool isFuncDescCompatible(const typeDesc* expected, astNode* exprNode)
         }
     }
 
+    if (exprNode->nodeType == AST_EXPR_LIST_LITERAL &&
+        expected->type == S_TYPE_LIST &&
+        exprNode->typeInfo->type == S_TYPE_LIST && expected->elemType != NULL &&
+        exprNode->typeInfo->elemType != NULL &&
+        expected->elemType->type == S_TYPE_DOUBLE &&
+        exprNode->typeInfo->elemType->type == S_TYPE_INT)
+    {
+        for (int i = 0; i < exprNode->childCount; i++)
+        {
+            if (exprNode->children[i] != NULL &&
+                exprNode->children[i]->retType == S_TYPE_INT)
+            {
+                exprNode->children[i]->int2float = true;
+            }
+        }
+        exprNode->typeInfo->elemType->type = S_TYPE_DOUBLE;
+        return true;
+    }
+
     return false;
 }
 
-static dataType checkUnaryExpr(astNode* uNode, symtable* globalTable,
-                               astNode* currentNode, Errors* err)
+static dataType checkExprWithExpected(astNode* expr,
+                                      const typeDesc* expectedDesc,
+                                      symtable* globalTable,
+                                      astNode* currentNode, Errors mismatchCode,
+                                      Errors* err)
 {
-    if (uNode == NULL || globalTable == NULL || currentNode == NULL ||
-        err == NULL || uNode->childCount < 1 || uNode->children == NULL ||
-        uNode->children[0] == NULL)
+    if (expr == NULL || globalTable == NULL || currentNode == NULL ||
+        err == NULL)
+    {
+        if (err != NULL)
+        {
+            *err = ERROR_INTERNAL;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    *err = resolveEmptyListLiteral(expr, expectedDesc);
+    if (*err != 0)
+    {
+        if (*err == ERROR_TYPE_MISMATCH)
+        {
+            *err = mismatchCode;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    if (expr->nodeType == AST_EXPR_VAR && expr->data.varData.key != NULL &&
+        symtableGetVarType(globalTable, expr->data.varData.key) ==
+            S_TYPE_UNKNOWN)
+    {
+        *err = resolveFuncVarReference(expr, expectedDesc, globalTable);
+        if (*err != 0)
+        {
+            if (*err == ERROR_TYPE_MISMATCH)
+            {
+                *err = mismatchCode;
+            }
+            return S_TYPE_UNKNOWN;
+        }
+        return S_TYPE_FUNC;
+    }
+
+    dataType type = checkExpr(expr, globalTable, currentNode, err);
+    if (*err != 0 || type == S_TYPE_UNKNOWN)
+    {
+        if (*err == 0)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    if (expectedDesc != NULL &&
+        (expectedDesc->type == S_TYPE_LIST ||
+         expectedDesc->type == S_TYPE_FUNC) &&
+        type == expectedDesc->type && !adaptComplexDesc(expectedDesc, expr))
+    {
+        *err = mismatchCode;
+        return S_TYPE_UNKNOWN;
+    }
+    return type;
+}
+
+static int resolveEmptyListLiteral(astNode* exprNode,
+                                   const typeDesc* expectedDesc)
+{
+    if (exprNode == NULL || exprNode->nodeType != AST_EXPR_LIST_LITERAL ||
+        exprNode->childCount > 0 || exprNode->typeInfo != NULL)
+    {
+        return 0; /** list was not empty */
+    }
+
+    if (expectedDesc == NULL || expectedDesc->type != S_TYPE_LIST ||
+        expectedDesc->elemType == NULL)
+    {
+        return ERROR_TYPE_MISMATCH; /** empty list that does not have compatable
+                                       type */
+    }
+
+    exprNode->typeInfo = typeDescClone(expectedDesc);
+    if (exprNode->typeInfo == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+    exprNode->retType = S_TYPE_LIST;
+    return 0;
+}
+static dataType checkListLiteral(astNode* listNode, symtable* globalTable,
+                                 astNode* currentNode, Errors* err)
+{
+    if (listNode == NULL || globalTable == NULL || currentNode == NULL ||
+        err == NULL)
+    {
+        if (err != NULL)
+        {
+            *err = ERROR_INTERNAL;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    /** check whether empty list's type was given by
+     * resolveEmptyListLiteral fucntion
+     */
+    if (listNode->childCount == 0)
+    {
+        if (listNode->typeInfo != NULL &&
+            listNode->typeInfo->type == S_TYPE_LIST)
+        {
+            listNode->retType = S_TYPE_LIST;
+            return S_TYPE_LIST;
+        }
+        *err = ERROR_TYPE_MISMATCH;
+        return S_TYPE_UNKNOWN;
+    }
+
+    dataType elemType = S_TYPE_UNKNOWN;
+    const typeDesc* elemDescRef = NULL;
+    bool hasInt = false;
+    bool hasDouble = false;
+
+    for (int i = 0; i < listNode->childCount; i++)
+    {
+        astNode* elem = listNode->children[i];
+        if (elem == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+
+        /** if first element of the list was identified
+         *  allow the use of empty lists
+         */
+        if (elemDescRef != NULL)
+        {
+            *err = resolveEmptyListLiteral(elem, elemDescRef);
+            if (*err != 0)
+            {
+                return S_TYPE_UNKNOWN;
+            }
+        }
+
+        dataType type = checkExpr(elem, globalTable, currentNode, err);
+        if (*err != 0 || type == S_TYPE_UNKNOWN)
+        {
+            if (*err == 0)
+            {
+                *err = ERROR_TYPE_MISMATCH;
+            }
+            return S_TYPE_UNKNOWN;
+        }
+
+        if (i == 0)
+        {
+            elemType = type;
+            elemDescRef = elem->typeInfo;
+            if (type == S_TYPE_INT)
+            {
+                hasInt = true;
+            }
+            if (type == S_TYPE_DOUBLE)
+            {
+                hasDouble = true;
+            }
+        }
+        else
+        {
+            if (type == elemType)
+            {
+                if (elemDescRef != NULL)
+                {
+                    if (elem->typeInfo == NULL ||
+                        !typeDescEquals(elemDescRef, elem->typeInfo))
+                    {
+                        *err = ERROR_TYPE_MISMATCH;
+                        return S_TYPE_UNKNOWN;
+                    }
+                }
+            }
+            else if ((elemType == S_TYPE_INT && type == S_TYPE_DOUBLE) ||
+                     (elemType == S_TYPE_DOUBLE && type == S_TYPE_INT))
+            {
+                elemType = S_TYPE_DOUBLE;
+                hasInt = true;
+                hasDouble = true;
+            }
+            else
+            {
+                *err = ERROR_TYPE_MISMATCH;
+                return S_TYPE_UNKNOWN;
+            }
+        }
+    }
+
+    /** if in list values are mixed (ints and doubles) convert them all into
+     * double */
+    if (hasInt && hasDouble)
+    {
+        for (int i = 0; i < listNode->childCount; i++)
+        {
+            if (listNode->children[i]->retType == S_TYPE_INT)
+            {
+                listNode->children[i]->int2float = true;
+            }
+        }
+    }
+
+    typeDesc* elemDesc = NULL;
+    if (elemDescRef != NULL)
+    {
+        elemDesc = typeDescClone(elemDescRef);
+    }
+    else
+    {
+        elemDesc = typeCreatePrimitive(elemType);
+    }
+    if (elemDesc == NULL)
     {
         *err = ERROR_INTERNAL;
         return S_TYPE_UNKNOWN;
     }
 
-    dataType type =
-        checkExpr(uNode->children[0], globalTable, currentNode, err);
-    if (type == S_TYPE_UNKNOWN || *err != 0)
+    typeDesc* listDesc = typeCreateList(elemDesc);
+    if (listDesc == NULL)
     {
+        *err = ERROR_INTERNAL;
         return S_TYPE_UNKNOWN;
     }
 
-    if ((uNode->data.opType == AST_OP_NEG ||
-         uNode->data.opType == AST_OP_POS) &&
-        (type == S_TYPE_INT || type == S_TYPE_DOUBLE))
+    typeDescDestroy(listNode->typeInfo);
+    listNode->typeInfo = listDesc;
+    listNode->retType = S_TYPE_LIST;
+    return S_TYPE_LIST;
+}
+static int checkForEach(astNode* forNode, symtable* globalTable,
+                        astNode* currentNode)
+{
+    if (forNode == NULL || globalTable == NULL || currentNode == NULL ||
+        forNode->data.forData.key == NULL || forNode->childCount < 2 ||
+        forNode->children == NULL || forNode->children[0] == NULL ||
+        forNode->children[1] == NULL)
     {
-        uNode->retType = type;
-        return type;
+        return ERROR_INTERNAL;
     }
-    if (uNode->data.opType == AST_OP_NOT)
+
+    Errors err = 0;
+    astNode* iterable = forNode->children[0];
+    dataType iterType = checkExpr(iterable, globalTable, currentNode, &err);
+    if (err != 0)
     {
-        if (type == S_TYPE_BOOL)
+        return err;
+    }
+    if (iterType != S_TYPE_LIST || iterable->typeInfo == NULL ||
+        iterable->typeInfo->type != S_TYPE_LIST ||
+        iterable->typeInfo->elemType == NULL)
+    {
+        return ERROR_TYPE_MISMATCH;
+    }
+
+    const typeDesc* elemDesc = iterable->typeInfo->elemType;
+    err = stackPush(globalTable);
+    if (err != 0)
+    {
+        return err;
+    }
+
+    err = stackInsertVar(globalTable, forNode->data.forData.key, elemDesc->type,
+                         true);
+    if (err != 0)
+    {
+        stackPop(globalTable);
+        return err;
+    }
+
+    if (elemDesc->type == S_TYPE_LIST || elemDesc->type == S_TYPE_FUNC)
+    {
+        err = symtableSetVarTypeDesc(globalTable, forNode->data.forData.key,
+                                     elemDesc);
+        if (err != 0)
         {
-            uNode->retType = S_TYPE_BOOL;
-            return S_TYPE_BOOL;
+            stackPop(globalTable);
+            return err;
         }
+    }
+
+    forNode->data.forData.id =
+        symtableGetVarId(globalTable, forNode->data.forData.key);
+
+    err =
+        checkBlock(forNode->children[1], globalTable, currentNode, false, NULL);
+    stackPop(globalTable);
+    return err;
+}
+
+static dataType checkCallExprNode(astNode* callExprNode, symtable* globalTable,
+                                  astNode* currentNode, Errors* err)
+{
+    if (callExprNode == NULL || globalTable == NULL || currentNode == NULL ||
+        err == NULL || callExprNode->childCount < 1 ||
+        callExprNode->children == NULL || callExprNode->children[0] == NULL)
+    {
+        if (err != NULL)
+        {
+            *err = ERROR_INTERNAL;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    astNode* caller = callExprNode->children[0];
+    dataType callerType = checkExpr(caller, globalTable, currentNode, err);
+    if (*err != 0 || callerType == S_TYPE_UNKNOWN)
+    {
+        if (*err == 0) *err = ERROR_TYPE_MISMATCH;
+        return S_TYPE_UNKNOWN;
+    }
+
+    int argCount = callExprNode->childCount - 1;
+
+    /* 1. Result indexetion of expression of type list[T]*/
+    if (callerType == S_TYPE_LIST)
+    {
+        if (argCount != 1)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+        dataType idxType =
+            checkExpr(callExprNode->children[1], globalTable, currentNode, err);
+        if (*err != 0)
+        {
+            return S_TYPE_UNKNOWN;
+        }
+        if (idxType != S_TYPE_INT)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+
+        if (caller->typeInfo == NULL || caller->typeInfo->type != S_TYPE_LIST ||
+            caller->typeInfo->elemType == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+
+        dataType elemType = caller->typeInfo->elemType->type;
+        if (elemType == S_TYPE_LIST || elemType == S_TYPE_FUNC)
+        {
+            typeDescDestroy(callExprNode->typeInfo);
+            callExprNode->typeInfo = typeDescClone(caller->typeInfo->elemType);
+        }
+        callExprNode->retType = elemType;
+        return elemType;
+    }
+    /** Call to the result of funtional type */
+    if (callerType == S_TYPE_FUNC)
+    {
+        const typeDesc* funcDesc = caller->typeInfo;
+        if (funcDesc == NULL || funcDesc->type != S_TYPE_FUNC)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+
+        if (funcDesc->func.paramCount != argCount)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+
+        for (int i = 0; i < argCount; i++)
+        {
+            astNode* arg = callExprNode->children[i + 1];
+            const typeDesc* expParam = funcDesc->func.paramTypes[i];
+            dataType argType =
+                checkExprWithExpected(arg, expParam, globalTable, currentNode,
+                                      ERROR_WRONG_ARGUMENTS, err);
+            if (*err != 0)
+            {
+                return S_TYPE_UNKNOWN;
+            }
+
+            if (expParam->type != S_TYPE_ANY)
+            {
+                if (expParam->type != argType)
+                {
+                    if (argType == S_TYPE_INT &&
+                        expParam->type == S_TYPE_DOUBLE)
+                    {
+                        arg->int2float = true;
+                    }
+                    else
+                    {
+                        *err = ERROR_WRONG_ARGUMENTS;
+                        return S_TYPE_UNKNOWN;
+                    }
+                }
+                else if ((expParam->type == S_TYPE_FUNC ||
+                          expParam->type == S_TYPE_LIST) &&
+                         (!typeDescEquals(expParam, arg->typeInfo) &&
+                          !adaptComplexDesc(expParam, arg)))
+                {
+                    *err = ERROR_WRONG_ARGUMENTS;
+                    return S_TYPE_UNKNOWN;
+                }
+            }
+        }
+
+        dataType retType = S_TYPE_UNIT;
+        if (funcDesc->func.returnType != NULL)
+        {
+            retType = funcDesc->func.returnType->type;
+        }
+        if (funcDesc->func.returnType != NULL &&
+            (retType == S_TYPE_FUNC || retType == S_TYPE_LIST))
+        {
+            typeDescDestroy(callExprNode->typeInfo);
+            callExprNode->typeInfo = typeDescClone(funcDesc->func.returnType);
+        }
+        callExprNode->retType = retType;
+        return retType;
+    }
+
+    *err = ERROR_TYPE_MISMATCH;
+    return S_TYPE_UNKNOWN;
+}
+static dataType checkRangeExpr(astNode* rangeNode, symtable* globalTable,
+                               astNode* currentNode, Errors* err)
+{
+    if (rangeNode == NULL || globalTable == NULL || currentNode == NULL ||
+        err == NULL || rangeNode->childCount < 2 ||
+        rangeNode->children == NULL || rangeNode->children[0] == NULL ||
+        rangeNode->children[1] == NULL)
+    {
+        if (err != NULL)
+        {
+            *err = ERROR_INTERNAL;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    dataType fromType =
+        checkExpr(rangeNode->children[0], globalTable, currentNode, err);
+    if (*err != 0)
+    {
+        return S_TYPE_UNKNOWN;
+    }
+    if (fromType != S_TYPE_INT)
+    {
         *err = ERROR_TYPE_MISMATCH;
         return S_TYPE_UNKNOWN;
     }
+
+    dataType endType =
+        checkExpr(rangeNode->children[1], globalTable, currentNode, err);
+    if (*err != 0)
+    {
+        return S_TYPE_UNKNOWN;
+    }
+    if (endType != S_TYPE_INT)
+    {
+        *err = ERROR_TYPE_MISMATCH;
+        return S_TYPE_UNKNOWN;
+    }
+
+    if (rangeNode->data.rangeData.hasStep)
+    {
+        if (rangeNode->childCount < 3 || rangeNode->children[2] == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+        astNode* stepNode = rangeNode->children[2];
+        dataType stepType = checkExpr(stepNode, globalTable, currentNode, err);
+        if (*err != 0)
+        {
+            return S_TYPE_UNKNOWN;
+        }
+        if (stepType != S_TYPE_INT)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+        if (stepNode->nodeType == AST_EXPR_LITERAL &&
+            stepNode->data.intVal == 0)
+        {
+            *err = ERROR_OTHER_SEMANTIC;
+            return S_TYPE_UNKNOWN;
+        }
+    }
+
+    rangeNode->retType = S_TYPE_UNIT;
+    return S_TYPE_UNIT;
+}
+static dataType checkMemberExpr(astNode* memberNode, symtable* globalTable,
+                                astNode* currentNode, Errors* err)
+{
+    if (memberNode == NULL || globalTable == NULL || currentNode == NULL ||
+        err == NULL || memberNode->data.memberData.key == NULL ||
+        memberNode->childCount < 1 || memberNode->children == NULL ||
+        memberNode->children[0] == NULL)
+    {
+        if (err != NULL)
+        {
+            *err = ERROR_INTERNAL;
+        }
+        return S_TYPE_UNKNOWN;
+    }
+
+    const char* memberName = memberNode->data.memberData.key;
+    bool hasArgs = memberNode->data.memberData.hasArgs;
+    int argCount = memberNode->childCount - 1;
+    astNode* receiver = memberNode->children[0];
+
+    /** static call List.range(start, end, step?) */
+    if (receiver->nodeType == AST_EXPR_VAR &&
+        receiver->data.varData.key != NULL &&
+        strcmp(receiver->data.varData.key, "List") == 0 &&
+        symtableGetVarType(globalTable, "List") == S_TYPE_UNKNOWN)
+    {
+        if (strcmp(memberName, "range") != 0 || !hasArgs)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+        if (argCount != 2 && argCount != 3)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+        for (int i = 1; i <= argCount; i++)
+        {
+            dataType aType = checkExpr(memberNode->children[i], globalTable,
+                                       currentNode, err);
+            if (*err != 0)
+            {
+                return S_TYPE_UNKNOWN;
+            }
+            if (aType != S_TYPE_INT)
+            {
+                *err = ERROR_WRONG_ARGUMENTS;
+                return S_TYPE_UNKNOWN;
+            }
+        }
+        if (argCount == 3 &&
+            memberNode->children[3]->nodeType == AST_EXPR_LITERAL &&
+            memberNode->children[3]->data.intVal == 0)
+        {
+            *err = ERROR_OTHER_SEMANTIC;
+            return S_TYPE_UNKNOWN;
+        }
+
+        typeDesc* listDesc = typeCreateList(typeCreatePrimitive(S_TYPE_INT));
+        if (listDesc == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+        typeDescDestroy(memberNode->typeInfo);
+        memberNode->typeInfo = listDesc;
+        memberNode->retType = S_TYPE_LIST;
+        return S_TYPE_LIST;
+    }
+
+    /** Range member (a to b).toList */
+    if (receiver->nodeType == AST_EXPR_RANGE)
+    {
+        checkRangeExpr(receiver, globalTable, currentNode, err);
+        if (*err != 0)
+        {
+            return S_TYPE_UNKNOWN;
+        }
+        if (strcmp(memberName, "toList") != 0 || hasArgs || argCount != 0)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+
+        typeDesc* listDesc = typeCreateList(typeCreatePrimitive(S_TYPE_INT));
+        if (listDesc == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+        typeDescDestroy(memberNode->typeInfo);
+        memberNode->typeInfo = listDesc;
+        memberNode->retType = S_TYPE_LIST;
+        return S_TYPE_LIST;
+    }
+
+    /** methods and members of List[T] */
+    dataType recvType = checkExpr(receiver, globalTable, currentNode, err);
+    if (*err != 0)
+    {
+        return S_TYPE_UNKNOWN;
+    }
+    if (recvType != S_TYPE_LIST || receiver->typeInfo == NULL ||
+        receiver->typeInfo->type != S_TYPE_LIST ||
+        receiver->typeInfo->elemType == NULL)
+    {
+        *err = ERROR_TYPE_MISMATCH;
+        return S_TYPE_UNKNOWN;
+    }
+
+    const typeDesc* listDesc = receiver->typeInfo;
+    const typeDesc* elemDesc = listDesc->elemType;
+
+    /** members with no () .head, .tail, .toString */
+    if (strcmp(memberName, "head") == 0)
+    {
+        if (hasArgs || argCount != 0)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+        if (elemDesc->type == S_TYPE_LIST || elemDesc->type == S_TYPE_FUNC)
+        {
+            typeDescDestroy(memberNode->typeInfo);
+            memberNode->typeInfo = typeDescClone(elemDesc);
+        }
+        memberNode->retType = elemDesc->type;
+        return elemDesc->type;
+    }
+
+    if (strcmp(memberName, "tail") == 0)
+    {
+        if (hasArgs || argCount != 0)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+        typeDescDestroy(memberNode->typeInfo);
+        memberNode->typeInfo = typeDescClone(listDesc);
+        memberNode->retType = S_TYPE_LIST;
+        return S_TYPE_LIST;
+    }
+
+    if (strcmp(memberName, "toString") == 0)
+    {
+        if (hasArgs || argCount != 0)
+        {
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
+        }
+        memberNode->retType = S_TYPE_STRING;
+        return S_TYPE_STRING;
+    }
+
+    /** Methods with 1 argument Int: .drop(n), .take(n) */
+    if (strcmp(memberName, "drop") == 0 || strcmp(memberName, "take") == 0)
+    {
+        if (!hasArgs || argCount != 1)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+        dataType aType =
+            checkExpr(memberNode->children[1], globalTable, currentNode, err);
+        if (*err != 0)
+        {
+            return S_TYPE_UNKNOWN;
+        }
+        if (aType != S_TYPE_INT)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+        typeDescDestroy(memberNode->typeInfo);
+        memberNode->typeInfo = typeDescClone(listDesc);
+        memberNode->retType = S_TYPE_LIST;
+        return S_TYPE_LIST;
+    }
+
+    /** Methods with 2 argumentInt: .slice(from, until) */
+    if (strcmp(memberName, "slice") == 0)
+    {
+        if (!hasArgs || argCount != 2)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+        for (int i = 1; i <= 2; i++)
+        {
+            dataType aType = checkExpr(memberNode->children[i], globalTable,
+                                       currentNode, err);
+            if (*err != 0)
+            {
+                return S_TYPE_UNKNOWN;
+            }
+            if (aType != S_TYPE_INT)
+            {
+                *err = ERROR_WRONG_ARGUMENTS;
+                return S_TYPE_UNKNOWN;
+            }
+        }
+        typeDescDestroy(memberNode->typeInfo);
+        memberNode->typeInfo = typeDescClone(listDesc);
+        memberNode->retType = S_TYPE_LIST;
+        return S_TYPE_LIST;
+    }
+
+    /**  other methods .filter(pred), .takeWhile(pred),
+     *  .dropWhile(pred)
+     * */
+    if (strcmp(memberName, "filter") == 0 ||
+        strcmp(memberName, "takeWhile") == 0 ||
+        strcmp(memberName, "dropWhile") == 0)
+    {
+        if (!hasArgs || argCount != 1)
+        {
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+
+        typeDesc** predParams = malloc(sizeof(typeDesc*));
+        if (predParams == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+        predParams[0] = typeDescClone(elemDesc);
+        typeDesc* expectedPred =
+            typeCreateFunc(1, predParams, typeCreatePrimitive(S_TYPE_BOOL));
+        if (expectedPred == NULL)
+        {
+            *err = ERROR_INTERNAL;
+            return S_TYPE_UNKNOWN;
+        }
+
+        astNode* predArg = memberNode->children[1];
+        dataType predType =
+            checkExprWithExpected(predArg, expectedPred, globalTable,
+                                  currentNode, ERROR_WRONG_ARGUMENTS, err);
+        if (*err != 0)
+        {
+            typeDescDestroy(expectedPred);
+            return S_TYPE_UNKNOWN;
+        }
+        if (predType != S_TYPE_FUNC)
+        {
+            typeDescDestroy(expectedPred);
+            *err = ERROR_WRONG_ARGUMENTS;
+            return S_TYPE_UNKNOWN;
+        }
+
+        typeDescDestroy(expectedPred);
+        typeDescDestroy(memberNode->typeInfo);
+        memberNode->typeInfo = typeDescClone(listDesc);
+        memberNode->retType = S_TYPE_LIST;
+        return S_TYPE_LIST;
+    }
+
     *err = ERROR_TYPE_MISMATCH;
     return S_TYPE_UNKNOWN;
 }
