@@ -203,6 +203,39 @@ static int generateIf(const astNode* ifNode, codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Prints while */
+static int generateWhile(const astNode* whileNode, codegenContext* context)
+{
+    const astNode* condition = whileNode->children[0];
+    const astNode* body = whileNode->children[1];
+    size_t labelNumber = takeLabelNumber(context);
+
+    // start of the loop
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_WHILE_START, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // check condition
+    RETURN_IF_ERROR(pushExpression(condition, context));
+    RETURN_IF_ERROR(writeJumpIfFalse(LABEL_WHILE_END, labelNumber));
+
+    // do the body and clean stack after it
+    RETURN_IF_ERROR(generateBlock(body, context));
+    RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
+
+    // go back to check again
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_WHILE_START, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // end of the loop
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_WHILE_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Prints command from the block */
 static int generateCommand(const astNode* command, codegenContext* context)
 {
@@ -228,6 +261,9 @@ static int generateCommand(const astNode* command, codegenContext* context)
 
         case AST_STAT_IF:
             return generateIf(command, context);
+
+        case AST_STAT_WHILE:
+            return generateWhile(command, context);
 
         default:
             return ERROR_INTERNAL;
