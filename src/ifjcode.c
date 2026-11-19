@@ -141,6 +141,26 @@ static int generateSetVariable(const astNode* command, codegenContext* context)
     return writeVarInstruction("POPS", name, number);
 }
 
+/** Gives the result and leaves the function */
+static int generateReturn(const astNode* command, codegenContext* context)
+{
+    // check if return isn't empty
+    bool hasValue = (command->childCount > 0);
+
+    // !empty
+    if (hasValue == true)
+    {
+        RETURN_IF_ERROR(pushExpression(command->children[0], context));
+    }
+    // empty
+    else
+    {
+        RETURN_IF_ERROR(tryPrint("PUSHS nil@nil\n"));
+    }
+
+    return writeFunctionExit(context);
+}
+
 /** Prints command from the block */
 static int generateCommand(const astNode* command, codegenContext* context)
 {
@@ -160,6 +180,9 @@ static int generateCommand(const astNode* command, codegenContext* context)
         case AST_STAT_VAR:
         case AST_STAT_SET:
             return generateSetVariable(command, context);
+
+        case AST_STAT_RETURN:
+            return generateReturn(command, context);
 
         default:
             return ERROR_INTERNAL;
