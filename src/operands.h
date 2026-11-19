@@ -162,4 +162,13 @@ int writeJumpLabel(jumpLabelType type, size_t number);
  */
 int writeJumpIfFalse(jumpLabelType type, size_t number);
 
+/**
+ * @brief Jumps to label if the value on the stack is true
+ *
+ * @param type
+ * @param number
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeJumpIfTrue(jumpLabelType type, size_t number);
+
 #endif

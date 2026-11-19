@@ -272,3 +272,15 @@ int writeJumpIfFalse(jumpLabelType type, size_t number)
 
     return ERROR_SUCCESS;
 }
+
+/** Jumps to label if the value on the stack is true */
+int writeJumpIfTrue(jumpLabelType type, size_t number)
+{
+    // put true on stack and compare
+    RETURN_IF_ERROR(tryPrint("PUSHS bool@true\n"));
+    RETURN_IF_ERROR(tryPrint("JUMPIFEQS "));
+    RETURN_IF_ERROR(writeJumpLabel(type, number));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
