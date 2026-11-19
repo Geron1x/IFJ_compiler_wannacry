@@ -188,6 +188,19 @@ int writeVarInstruction(const char* instruction, const char* name,
     return ERROR_SUCCESS;
 }
 
+/** Prints instruction with a hidden variable of the for */
+int writeForPartInstruction(const char* instruction, const char* name,
+                            size_t number, const char* part)
+{
+    RETURN_IF_ERROR(tryPrint(instruction));
+    RETURN_IF_ERROR(tryPrint(" "));
+    RETURN_IF_ERROR(writeVarName(name, number));
+    RETURN_IF_ERROR(tryPrint(part));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Gives us a text for jump labels */
 static const char* getJumpLabelText(jumpLabelType type)
 {
@@ -225,6 +238,15 @@ static const char* getJumpLabelText(jumpLabelType type)
 
         case LABEL_FOR_END:
             return "for$end";
+
+        case LABEL_FOR_STEP_OK:
+            return "for$stepok";
+
+        case LABEL_FOR_DOWN:
+            return "for$down";
+
+        case LABEL_FOR_BODY:
+            return "for$body";
 
         default:  // not in the list
             return NULL;

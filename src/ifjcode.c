@@ -163,7 +163,7 @@ static int generateReturn(const astNode* command, codegenContext* context)
 static int generateBlock(const astNode* block, codegenContext* context);
 
 /** Prints the whole if */
-static int generateIf(const astNode* ifNode, codegenContext* context)
+int generateIf(const astNode* ifNode, codegenContext* context)
 {
     const astNode* condition = ifNode->children[0];
     const astNode* thenBlock = ifNode->children[1];
@@ -236,6 +236,124 @@ static int generateWhile(const astNode* whileNode, codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Prints for */
+static int generateFor(const astNode* forNode, codegenContext* context)
+{
+    const astNode* from = forNode->children[0];
+    const astNode* end = forNode->children[1];
+    const char* name = forNode->data.forData.key;
+    size_t number = forNode->data.forData.id;
+    size_t labelNumber = takeLabelNumber(context);
+
+    // count where we start and put it in the counter
+    RETURN_IF_ERROR(pushExpression(from, context));
+    RETURN_IF_ERROR(writeVarInstruction("POPS", name, number));
+
+    // count where we stop
+    RETURN_IF_ERROR(pushExpression(end, context));
+    RETURN_IF_ERROR(writeForPartInstruction("POPS", name, number, "?end"));
+
+    // count the step, no step means we go by one
+    if (forNode->data.forData.hasStep == true)
+    {
+        const astNode* step = forNode->children[3];
+        RETURN_IF_ERROR(pushExpression(step, context));
+    }
+    else
+    {
+        RETURN_IF_ERROR(tryPrint("PUSHS int@1\n"));
+    }
+    RETURN_IF_ERROR(writeForPartInstruction("POPS", name, number, "?step"));
+
+    // step is zero - stop the program with error
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?step"));
+    RETURN_IF_ERROR(tryPrint("PUSHS int@0\n"));
+    RETURN_IF_ERROR(tryPrint("JUMPIFNEQS "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_STEP_OK, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+    RETURN_IF_ERROR(tryPrint("EXIT int@40\n"));
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_STEP_OK, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    bool isInclusive = forNode->data.forData.isInclusive;
+
+    // every round starts here
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_CHECK, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // step below zero means we go down
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?step"));
+    RETURN_IF_ERROR(tryPrint("PUSHS int@0\nLTS\n"));
+    RETURN_IF_ERROR(writeJumpIfTrue(LABEL_FOR_DOWN, labelNumber));
+
+    // going up - stop when we are past the end
+    RETURN_IF_ERROR(writeVarInstruction("PUSHS", name, number));
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?end"));
+
+    if (isInclusive == true)
+    {
+        RETURN_IF_ERROR(tryPrint("GTS\n"));
+        RETURN_IF_ERROR(writeJumpIfTrue(LABEL_FOR_END, labelNumber));
+    }
+    else
+    {
+        RETURN_IF_ERROR(tryPrint("LTS\n"));
+        RETURN_IF_ERROR(writeJumpIfFalse(LABEL_FOR_END, labelNumber));
+    }
+
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_BODY, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // going down - stop when we are below the end
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_DOWN, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+    RETURN_IF_ERROR(writeVarInstruction("PUSHS", name, number));
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?end"));
+
+    if (isInclusive == true)
+    {
+        RETURN_IF_ERROR(tryPrint("LTS\n"));
+        RETURN_IF_ERROR(writeJumpIfTrue(LABEL_FOR_END, labelNumber));
+    }
+    else
+    {
+        RETURN_IF_ERROR(tryPrint("GTS\n"));
+        RETURN_IF_ERROR(writeJumpIfFalse(LABEL_FOR_END, labelNumber));
+    }
+
+    // check passed, body goes next
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_BODY, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // do the body and clean stack after it
+    const astNode* body = forNode->children[2];
+    RETURN_IF_ERROR(generateBlock(body, context));
+    RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
+
+    // move the counter by the step
+    RETURN_IF_ERROR(writeVarInstruction("PUSHS", name, number));
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?step"));
+    RETURN_IF_ERROR(tryPrint("ADDS\n"));
+    RETURN_IF_ERROR(writeVarInstruction("POPS", name, number));
+
+    // go back to check again
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_CHECK, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // end of the loop
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Prints command from the block */
 static int generateCommand(const astNode* command, codegenContext* context)
 {
@@ -264,6 +382,9 @@ static int generateCommand(const astNode* command, codegenContext* context)
 
         case AST_STAT_WHILE:
             return generateWhile(command, context);
+
+        case AST_STAT_FOR:
+            return generateFor(command, context);
 
         default:
             return ERROR_INTERNAL;
@@ -312,6 +433,22 @@ static int generateBlock(const astNode* block, codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Defines all variables of the for */
+static int defineForVariables(const astNode* forNode)
+{
+    const char* name = forNode->data.forData.key;
+    size_t number = forNode->data.forData.id;
+
+    // loop counter
+    RETURN_IF_ERROR(writeVarInstruction("DEFVAR", name, number));
+
+    // we count the end and the step only once and keep them here
+    RETURN_IF_ERROR(writeForPartInstruction("DEFVAR", name, number, "?end"));
+    RETURN_IF_ERROR(writeForPartInstruction("DEFVAR", name, number, "?step"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Defines all variables of the function */
 static int defineVariables(const astNode* node)
 {
@@ -321,6 +458,12 @@ static int defineVariables(const astNode* node)
         const char* name = node->data.varData.key;
         size_t number = node->data.varData.id;
         RETURN_IF_ERROR(writeVarInstruction("DEFVAR", name, number));
+    }
+
+    // if node is for - we define its three variables
+    if (node->nodeType == AST_STAT_FOR)
+    {
+        RETURN_IF_ERROR(defineForVariables(node));
     }
 
     // check every child

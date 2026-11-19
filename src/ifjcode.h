@@ -12,6 +12,7 @@
 #define IFJCODE_H
 
 #include "ast.h"
+#include "ifjcode_expr.h"
 
 /**
  * @brief Prints IFJcode26
@@ -20,5 +21,14 @@
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
  */
 int generateIfjcode(const astNode* program);
+
+/**
+ * @brief Prints the whole if
+ *
+ * @param ifNode
+ * @param context
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int generateIf(const astNode* ifNode, codegenContext* context);
 
 #endif
