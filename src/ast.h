@@ -73,6 +73,8 @@ typedef enum astoptype
 
 typedef struct typeDesc typeDesc;
 
+
+void astSetTypeDesc(astNode* node, typeDesc* desc);
 typeDesc* typeCreatePrimitive(dataType kind);
 typeDesc* typeCreateList(typeDesc* elemType);
 typeDesc* typeCreateFunc(int paramCount, typeDesc** paramTypes,
