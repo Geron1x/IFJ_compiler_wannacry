@@ -1,6 +1,6 @@
 /**
  * @file symtable.h
- * @brief header file for the symtable implementation
+ * @brief Header file for the symbol-table implementation
  *
  * Project: Implementace překladače imperativního jazyka IFJ26
  *
@@ -85,17 +85,15 @@ int symtableGetFuncParamCount(symtable* table, const char* key);
  */
 dataType symtableGetFuncParamType(symtable* table, const char* key, int index);
 /**
- * @brief Returns an id (instance counter number) of variable from passed
- * variable name (key)
+ * @brief Returns a variable instance id for the passed variable name
  */
 size_t symtableGetVarId(symtable* symtable, const char* key);
 /**
- * @brief Returns whether a function is being analyzed
- * (flag to identify recurion)
+ * @brief Returns whether a function is currently being analyzed
  */
 bool symtableGetFuncIsAnalyzing(symtable* table, const char* key);
 /**
- * @brief Sets whether a function is being analyzed (flag to identify recurion)
+ * @brief Sets whether a function is currently being analyzed
  */
 void symtableSetFuncIsAnalyzing(symtable* table, const char* key, bool status);
 /**
@@ -118,21 +116,17 @@ struct astNode* symtableGetFuncNode(symtable* table, const char* key);
 void symtableSetFuncReturn(symtable* table, const char* key,
                            dataType returnType);
 /**
- * @brief returns dataType of a variable,
- * Searched through all scopes,
- * Returns S_TYPE_UNKNOWN if no variable was found
+ * @brief Returns a variable dataType, searched through all scopes
  */
 dataType symtableGetVarType(symtable* symtable, const char* key);
 /**
- * @brief returns whether passed variable is val or var
+ * @brief Returns whether the passed variable is const
  */
 bool symtableGetIsVarConst(symtable* symtable, const char* key);
 /**
- * @brief returns data type that function under passed key returns
+ * @brief Returns the dataType produced by the function
  */
 dataType symtableGetFuncReturn(symtable* symtable, const char* key);
-
-/** - SETTERS/GETTERS */
 
 /**
  * @brief Opens new scope for local variables
@@ -146,7 +140,7 @@ void stackPop(symtable* symtable);
 
 /**
  * @brief Inserts a variable into current scope (local tree), can give
- * redifinition feedback error code
+ * redefinition feedback error code
  */
 int stackInsertVar(symtable* symtable, const char* key, dataType type,
                    bool isConst);
@@ -168,7 +162,7 @@ int symtableBaseFuncInit(symtable* funcTable);
 
 /**
  * @brief Inserts function into symtable,
- * can give redifinition feedback error code
+ * can return redefinition feedback error code
  */
 int symtableInsertFunc(symtable* symtable, const char* key, dataType returnType,
                        int paramCount, const dataType* paramType,

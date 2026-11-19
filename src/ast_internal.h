@@ -16,7 +16,7 @@
 /** type descriptor */
 typedef struct typeDesc
 {
-    dataType type; /** identifier for lists/lambdas */
+    dataType type; /** identifier for lists/lambdas/primitive descriptors */
     union
     {
         /** if type is a list make elemType the type of elements inside of the

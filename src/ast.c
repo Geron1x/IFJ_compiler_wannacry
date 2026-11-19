@@ -658,7 +658,7 @@ int astCreateListLiteral(astNode** retNode)
     return 0;
 }
 
-/** LAMDAS/LIST */
+/** Complex type descriptors for lambdas and lists */
 
 typeDesc* typeCreatePrimitive(dataType type)
 {
@@ -1042,7 +1042,7 @@ int astCreateForEach(const char* key, astNode* iterableExpr, astNode* body,
 }
 
 
-/** - LAMDAS/LIST */
+/** AST destruction */
 
 void astDestroy(astNode* node)
 {
