@@ -493,6 +493,20 @@ static int parseInterpolation(parcerContext* ctx, astNode** out)
     return ERROR_SUCCESS;
 }
 
+// Call the result again while ( follows, like goo()(5)
+// The wrapper takes the callee, so out always holds the whole tree
+static int parseCallChain(parcerContext* ctx, astNode** out)
+{
+    while (ctx->currentToken.type == TYPE_LEFT_PAREN)
+    {
+        astNode* wrapper = NULL;
+        CHECK_ERR(astCreateCallExpr(*out, &wrapper));
+        *out = wrapper;
+        CHECK_ERR(parseCallArgs(ctx, wrapper));
+    }
+    return ERROR_SUCCESS;
+}
+
 // Read one operand and build its node: literal, name, call or ()
 static int precConsumeOperand(parcerContext* ctx, astNode** out)
 {
@@ -528,7 +542,8 @@ static int precConsumeOperand(parcerContext* ctx, astNode** out)
         {
             CHECK_ERR(astCreateCall(ctx->currentToken.value.identifier, out));
             CHECK_ERR(advance(ctx));
-            return parseCallArgs(ctx, *out);
+            CHECK_ERR(parseCallArgs(ctx, *out));
+            return parseCallChain(ctx, out);
         }
         CHECK_ERR(astCreateVarExpr(ctx->currentToken.value.identifier, out));
         return advance(ctx);
