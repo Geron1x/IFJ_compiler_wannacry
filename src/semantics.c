@@ -1,6 +1,6 @@
 /**
  * @file semantics.c
- * @brief File for the implementaion of semantic analysis
+ * @brief File for semantic analysis implementation
  *
  * Project: Implementace překladače imperativního jazyka IFJ26
  *
@@ -2083,6 +2083,7 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
 }
 
 /** Adapt compatible complex descriptors and mark implicit conversions */
+/** Adapt compatible complex expressions and numeric conversions */
 static bool adaptComplexDesc(const typeDesc* expected, astNode* exprNode)
 {
     if (expected == NULL || exprNode == NULL || exprNode->typeInfo == NULL)
@@ -2152,6 +2153,7 @@ static bool adaptComplexDesc(const typeDesc* expected, astNode* exprNode)
     return false;
 }
 
+/** Check an expression against an optional expected type descriptor */
 static dataType checkExprWithExpected(astNode* expr,
                                       const typeDesc* expectedDesc,
                                       symtable* globalTable,

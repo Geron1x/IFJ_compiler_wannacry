@@ -40,7 +40,7 @@ typedef enum astnodetype
     AST_EXPR_MEMBER,
     AST_EXPR_RANGE,
     AST_EXPR_CALL_EXPR,
-    AST_STAT_FOR_EACH  // for x <- lst do ...
+    AST_STAT_FOR_EACH
 } astNodeType;
 
 
@@ -73,24 +73,62 @@ typedef enum astoptype
 
 typedef struct typeDesc typeDesc;
 
-
+/**
+ * @brief Sets a type descriptor on an AST node
+ */
 void astSetTypeDesc(astNode* node, typeDesc* desc);
-typeDesc* typeCreatePrimitive(dataType kind);
+/**
+ * @brief Creates a descriptor for a primitive type
+ */
+typeDesc* typeCreatePrimitive(dataType type);
+/**
+ * @brief Creates a list descriptor with the element type
+ */
 typeDesc* typeCreateList(typeDesc* elemType);
+/**
+ * @brief Creates a descriptor for a function type
+ */
 typeDesc* typeCreateFunc(int paramCount, typeDesc** paramTypes,
                          typeDesc* returnType);
+/**
+ * @brief Creates a deep copy of a type descriptor
+ */
 typeDesc* typeDescClone(const typeDesc* src);
+/**
+ * @brief Compares two type descriptors
+ */
 bool typeDescEquals(const typeDesc* a, const typeDesc* b);
+/**
+ * @brief Frees a type descriptor and its nested descriptors
+ */
 void typeDescDestroy(typeDesc* desc);
 
+/**
+ * @brief Creates a lambda expression node
+ */
 int astCreateLambda(dataType retType, typeDesc* retTypeDesc, astNode* body,
                     astNode** retNode);
+/**
+ * @brief Creates an empty list-literal node
+ */
 int astCreateListLiteral(astNode** retNode);
+/**
+ * @brief Creates a member-access or member-call node
+ */
 int astCreateMember(const char* name, astNode* receiver, bool hasArgs,
                     astNode** retNode);
+/**
+ * @brief Creates a range expression node
+ */
 int astCreateRange(astNode* from, astNode* end, astNode* step, bool isInclusive,
                    astNode** retNode);
+/**
+ * @brief Creates a call applied to another expression
+ */
 int astCreateCallExpr(astNode* calleeExpr, astNode** retNode);
+/**
+ * @brief Creates a for-each loop node
+ */
 int astCreateForEach(const char* key, astNode* iterableExpr, astNode* body,
                      astNode** retNode);
 
@@ -106,7 +144,7 @@ int astCreateProgram(astNode** progNode);
 int astCreateBlock(astNode** block);
 
 /**
- * @brief Make the statement (could be expression or some statement) node a part
+ * @brief Makes the statement (could be expression or some statement) node a part
  * (child) of the block node (statement is placed into the children array of
  * block node)
  */
@@ -174,8 +212,7 @@ int astCreateIfExpr(astNode* condition, astNode* thenBlock, astNode* elseBlock,
 /**
  * @brief Creates a literal node with type Int (AST_EXPR_LITERAL)
  */
-int astCreateLiteralInt(int val,
-                        astNode** retNode); /** CHANGE TO LONG LONG INT */
+int astCreateLiteralInt(int val, astNode** retNode);
 /**
  * @brief Creates a literal node with type Double (AST_EXPR_LITERAL)
  */

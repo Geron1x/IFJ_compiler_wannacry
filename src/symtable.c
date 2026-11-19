@@ -1,6 +1,6 @@
 /**
  * @file symtable.c
- * @brief File for the symtable implementation
+ * @brief File for the symbol-table implementation
  *
  * Project: Implementace překladače imperativního jazyka IFJ26
  *
@@ -262,7 +262,7 @@ int symtableInsertFunc(symtable* symtable, const char* key, dataType returnType,
         free(data);
         if (status == BST_EXISTS)
         {
-            /** it was reoccuring node, send redifinition error code */
+            /** Repeated function name, return redefinition error */
             return ERROR_REDEFINITION;
         }
         else
@@ -301,7 +301,7 @@ void stackPop(symtable* symtable)
         return;
     }
     scope* temp = symtable->top;
-    /** popping the stack  */
+    /** Remove the top scope */
     symtable->top = temp->prev;
 
     bstDestroy(&(temp->tree), eraseData);
@@ -338,8 +338,7 @@ int stackInsertVar(symtable* symtable, const char* key, dataType type,
         case BST_INSERTED:
             symtable->varInstanceCounter++;
             break;
-        /** Such variable was already present in local tree,
-         * Redifinition error */
+        /** Variable already exists in the current scope */
         case BST_EXISTS:
             free(newData);
             return ERROR_REDEFINITION;
@@ -347,7 +346,7 @@ int stackInsertVar(symtable* symtable, const char* key, dataType type,
         case BST_ERROR:
             free(newData);
             return ERROR_INTERNAL;
-        /** safe guard check for undifined behaviour */
+        /** Guard against an unexpected BST status */
         default:
             free(newData);
             return ERROR_OTHER_SEMANTIC;
@@ -355,7 +354,7 @@ int stackInsertVar(symtable* symtable, const char* key, dataType type,
     return 0;
 }
 
-/** SETTER GETTER */
+/** Descriptor getters and setters */
 
 const typeDesc* symtableGetFuncReturnTypeDesc(symtable* table, const char* key)
 {
@@ -695,9 +694,7 @@ size_t symtableGetVarId(symtable* symtable, const char* key)
 }
 
 
-/** -   SETTER GETTER */
-
-
+/** Search for a variable from the innermost active scope */
 static nodeData* stackFindVar(const char* key, symtable* symtable)
 {
     if (key == NULL || symtable == NULL || symtable->top == NULL)
@@ -727,7 +724,7 @@ void stackDestroy(symtable* symtable)
     while (symtable->top != NULL)
     {
         scope* temp = symtable->top;
-        /** popping the stack */
+        /** Remove the top scope */
         symtable->top = symtable->top->prev;
         if (temp->tree != NULL)
         {
@@ -758,7 +755,7 @@ int symtableInit(symtable** symTable)
     newTable->scopeLevel = 0;
     newTable->varInstanceCounter = INSTANCE_NUM_START;
 
-    /** transferring created table into passed argument */
+    /** Store the created table in the caller */
     *symTable = newTable;
     return 0;
 }
