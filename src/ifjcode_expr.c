@@ -59,6 +59,18 @@ static int pushLiteral(const astNode* literal)
     return ERROR_SUCCESS;
 }
 
+/** Pushes variable on the stack */
+static int pushVariable(const astNode* variable)
+{
+    // variable name from tree
+    const char* name = variable->data.varData.key;
+
+    size_t number = variable->data.varData.id;
+
+    // put it on the stack
+    return writeVarInstruction("PUSHS", name, number);
+}
+
 /** Gives the IFJcode word for the operator, like a phrasebook */
 static const char* translateOperator(astOpType operation, dataType resultType)
 {
@@ -215,6 +227,10 @@ int pushExpression(const astNode* expression, codegenContext* context)
 
         case AST_EXPR_UNARY:
             RETURN_IF_ERROR(pushUnary(expression, context));
+            break;
+
+        case AST_EXPR_VAR:
+            RETURN_IF_ERROR(pushVariable(expression));
             break;
 
         default:

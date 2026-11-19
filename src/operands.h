@@ -134,6 +134,17 @@ int writeTempVar(size_t number);
 int writeTempInstruction(const char* instruction, size_t number);
 
 /**
+ * @brief Prints instruction and variable
+ *
+ * @param instruction
+ * @param name
+ * @param number
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeVarInstruction(const char* instruction, const char* name,
+                        size_t number);
+
+/**
  * @brief Prints a label we can jump to
  *
  * @param type

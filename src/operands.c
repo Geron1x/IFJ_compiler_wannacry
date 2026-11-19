@@ -176,6 +176,18 @@ int writeTempInstruction(const char* instruction, size_t number)
     return ERROR_SUCCESS;
 }
 
+/** Prints instruction and variable */
+int writeVarInstruction(const char* instruction, const char* name,
+                        size_t number)
+{
+    RETURN_IF_ERROR(tryPrint(instruction));
+    RETURN_IF_ERROR(tryPrint(" "));
+    RETURN_IF_ERROR(writeVarName(name, number));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Gives us a text for jump labels */
 static const char* getJumpLabelText(jumpLabelType type)
 {
