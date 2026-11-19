@@ -88,6 +88,16 @@ int parseExpressionOrIf(parcerContext* ctx, astNode** out);
 int parseIfExpression(parcerContext* ctx, astNode** out);
 
 /**
+ * @brief Parses a lambda after its opening parenthesis: parameters, ), =>,
+ * body.
+ *
+ * @param ctx Parser state, current token follows the opening parenthesis.
+ * @param out Receives the lambda node on success.
+ * @return ERROR_SUCCESS, ERROR_LEXICAL, ERROR_SYNTAX or ERROR_INTERNAL.
+ */
+int parseLambda(parcerContext* ctx, astNode** out);
+
+/**
  * @brief Parses call arguments: values in parentheses separated by commas.
  *
  * @param ctx Parser state, current token is the opening parenthesis.

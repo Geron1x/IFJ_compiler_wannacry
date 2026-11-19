@@ -291,6 +291,9 @@ static bool isRangeWord(const char* name)
 static PrecSymbol precClassify(parcerContext* ctx, int depth,
                                bool expectOperand)
 {
+    // Value ended with an indented block, next line is a new statement
+    if (!expectOperand && ctx->prevType == TYPE_DEDENT) return PS_END;
+
     switch (ctx->currentToken.type)
     {
         case TYPE_MUL:
@@ -506,11 +509,14 @@ static int precConsumeOperand(parcerContext* ctx, astNode** out)
         return match(ctx, TYPE_RIGHT_PAREN);
     }
 
-    // Empty parentheses are two tokens and mean the Unit value
+    // Empty parentheses: Unit value, or a lambda without parameters if =>
+    // follows
     if (ctx->currentToken.type == TYPE_LEFT_PAREN)
     {
-        CHECK_ERR(astCreateLiteralUnit(out));
         CHECK_ERR(advance(ctx));
+        CHECK_ERR(peek(ctx));
+        if (ctx->peekToken.type == TYPE_ARROW) return parseLambda(ctx, out);
+        CHECK_ERR(astCreateLiteralUnit(out));
         return advance(ctx);
     }
 
@@ -534,16 +540,29 @@ static int precConsumeOperand(parcerContext* ctx, astNode** out)
 }
 
 // Push the token group, an operand gets its node right on the stack
-static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol in)
+// Parenthesis with name and colon after it is a lambda, in becomes operand
+static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol* in)
 {
     StackItem item = {
-        .kind = ITEM_TERM, .sym = in, .tokenType = ctx->currentToken.type};
+        .kind = ITEM_TERM, .sym = *in, .tokenType = ctx->currentToken.type};
     CHECK_ERR(precStackPush(stack, item));
-    if (in == PS_OPERAND)
+    if (*in == PS_OPERAND)
     {
         return precConsumeOperand(ctx, &stack->items[stack->count - 1].node);
     }
-    return advance(ctx);
+    CHECK_ERR(advance(ctx));
+    if (*in != PS_LPAREN || ctx->currentToken.type != TYPE_IDENTIFIER)
+        return ERROR_SUCCESS;
+
+    // Look past the name: colon means lambda parameters
+    CHECK_ERR(peek(ctx));
+    if (ctx->peekToken.type != TYPE_DOUBLE_DOT) return ERROR_SUCCESS;
+
+    // Pushed parenthesis turns into one operand holding the lambda
+    StackItem* top = &stack->items[stack->count - 1];
+    top->sym = PS_OPERAND;
+    *in = PS_OPERAND;
+    return parseLambda(ctx, &top->node);
 }
 
 // Main loop: push or fold until the expression ends, caller frees the stack
@@ -582,10 +601,10 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
         {
             case '<':
                 CHECK_ERR(precStackInsertHandle(stack));
-                CHECK_ERR(precShift(ctx, stack, in));
+                CHECK_ERR(precShift(ctx, stack, &in));
                 break;
             case '=':
-                CHECK_ERR(precShift(ctx, stack, in));
+                CHECK_ERR(precShift(ctx, stack, &in));
                 break;
             // Folding reads no token, so go to the next step at once
             case '>':

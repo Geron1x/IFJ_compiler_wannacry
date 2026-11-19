@@ -1,0 +1,5 @@
+import ifj26.*
+@main def main(): Unit =
+  val g = () => 5
+  val u = ()
+  print(g())
