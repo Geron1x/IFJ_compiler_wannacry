@@ -126,6 +126,21 @@ static bool givesValue(const astNode* node)
     }
 }
 
+/** Counts the value and puts it into the variable */
+static int generateSetVariable(const astNode* command, codegenContext* context)
+{
+    // get everything we need from the node
+    const astNode* value = command->children[0];
+    const char* name = command->data.varData.key;
+    size_t number = command->data.varData.id;
+
+    // count and put it on the stack
+    RETURN_IF_ERROR(pushExpression(value, context));
+
+    // move value from stack to the variable
+    return writeVarInstruction("POPS", name, number);
+}
+
 /** Prints command from the block */
 static int generateCommand(const astNode* command, codegenContext* context)
 {
@@ -140,6 +155,11 @@ static int generateCommand(const astNode* command, codegenContext* context)
         case AST_EXPR_IF:
             // just put the value on the stack
             return pushExpression(command, context);
+
+        // new variable or new value for a variable
+        case AST_STAT_VAR:
+        case AST_STAT_SET:
+            return generateSetVariable(command, context);
 
         default:
             return ERROR_INTERNAL;
@@ -188,6 +208,46 @@ static int generateBlock(const astNode* block, codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Defines all variables of the function */
+static int defineVariables(const astNode* node)
+{
+    // if node is variable - we define it
+    if (node->nodeType == AST_STAT_VAR)
+    {
+        const char* name = node->data.varData.key;
+        size_t number = node->data.varData.id;
+        RETURN_IF_ERROR(writeVarInstruction("DEFVAR", name, number));
+    }
+
+    // check every child
+    size_t childCount = (size_t)node->childCount;
+    for (size_t i = 0; i < childCount; i++)
+    {
+        RETURN_IF_ERROR(defineVariables(node->children[i]));
+    }
+
+    return ERROR_SUCCESS;
+}
+
+/** Takes the arguments from the stack into the param */
+static int popParams(const astNode* function)
+{
+    // children without commands
+    size_t paramCount = (size_t)function->childCount - 1;
+
+    // take arg from the end
+    for (size_t i = paramCount; i > 0; i--)
+    {
+        const astNode* param = function->children[i];
+        const char* name = param->data.varData.key;
+        size_t number = param->data.varData.id;
+
+        RETURN_IF_ERROR(writeVarInstruction("POPS", name, number));
+    }
+
+    return ERROR_SUCCESS;
+}
+
 /** Prints function */
 static int generateFunction(const astNode* function, codegenContext* context)
 {
@@ -210,8 +270,15 @@ static int generateFunction(const astNode* function, codegenContext* context)
     RETURN_IF_ERROR(defineTempVar(1));
     RETURN_IF_ERROR(defineTempVar(2));
 
+    // define all variables at the start
+    RETURN_IF_ERROR(defineVariables(function));
+
+    // params take their values from the stack
+    RETURN_IF_ERROR(popParams(function));
+
     // print all commands of the function
     RETURN_IF_ERROR(generateBlock(getFunctionBody(function), context));
+
     RETURN_IF_ERROR(writeFunctionExit(context));
 
     return ERROR_SUCCESS;
