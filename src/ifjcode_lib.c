@@ -314,18 +314,6 @@ static int writeLibrarySubStr(void)
     return writeLibraryEnd();
 }
 
-/** Prints function that reads bool from input */
-static int writeLibraryReadBoolean(void)
-{
-    RETURN_IF_ERROR(writeLibraryStart("readBoolean"));
-
-    RETURN_IF_ERROR(tryPrint("DEFVAR LF@value\n"));
-    RETURN_IF_ERROR(tryPrint("READ LF@value bool\n"));
-    RETURN_IF_ERROR(tryPrint("PUSHS LF@value\n"));
-
-    return writeLibraryEnd();
-}
-
 /** Prints all built-in functions */
 int writeLibrary(void)
 {
@@ -335,6 +323,7 @@ int writeLibrary(void)
     RETURN_IF_ERROR(writeLibraryRead("readInt", "int", "int@0"));
     RETURN_IF_ERROR(writeLibraryRead("readDouble", "float", "float@0x0p+0"));
     RETURN_IF_ERROR(writeLibraryRead("readLine", "string", "string@"));
+    RETURN_IF_ERROR(writeLibraryRead("readBoolean", "bool", "bool@false"));
 
     RETURN_IF_ERROR(writeLibraryToInt());
 
@@ -347,8 +336,6 @@ int writeLibrary(void)
     RETURN_IF_ERROR(writeLibraryToStr());
 
     RETURN_IF_ERROR(writeLibrarySubStr());
-
-    RETURN_IF_ERROR(writeLibraryReadBoolean());
 
     return ERROR_SUCCESS;
 }
