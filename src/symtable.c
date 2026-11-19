@@ -357,6 +357,162 @@ int stackInsertVar(symtable* symtable, const char* key, dataType type,
 
 /** SETTER GETTER */
 
+const typeDesc* symtableGetFuncReturnTypeDesc(symtable* table, const char* key)
+{
+    if (table == NULL || key == NULL)
+    {
+        return NULL;
+    }
+
+    nodeData* data = bstSearch(table->funcTree, key);
+    if (data == NULL || data->type != TYPE_FUNCTION)
+    {
+        return NULL;
+    }
+
+    return data->funcData.returnTypeInfo;
+}
+
+int symtableSetFuncReturnTypeDesc(symtable* table, const char* key,
+                                  const typeDesc* desc)
+{
+    if (table == NULL || key == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    nodeData* data = bstSearch(table->funcTree, key);
+    if (data == NULL || data->type != TYPE_FUNCTION)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    typeDesc* copy = NULL;
+    if (desc != NULL)
+    {
+        copy = typeDescClone(desc);
+        if (copy == NULL)
+        {
+            return ERROR_INTERNAL;
+        }
+    }
+
+    typeDescDestroy(data->funcData.returnTypeInfo);
+    data->funcData.returnTypeInfo = copy;
+    return 0;
+}
+
+const typeDesc* symtableGetFuncParamTypeDesc(symtable* table, const char* key,
+                                             int index)
+{
+    if (table == NULL || key == NULL || index < 0)
+    {
+        return NULL;
+    }
+
+    nodeData* data = bstSearch(table->funcTree, key);
+    if (data == NULL || data->type != TYPE_FUNCTION)
+    {
+        return NULL;
+    }
+
+    if (index >= data->funcData.paramCount ||
+        data->funcData.paramTypeInfos == NULL)
+    {
+        return NULL;
+    }
+
+    return data->funcData.paramTypeInfos[index];
+}
+
+int symtableSetFuncParamTypeDesc(symtable* table, const char* key, int index,
+                                 const typeDesc* desc)
+{
+    if (table == NULL || key == NULL || index < 0)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    nodeData* data = bstSearch(table->funcTree, key);
+    if (data == NULL || data->type != TYPE_FUNCTION)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    if (index >= data->funcData.paramCount)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    if (data->funcData.paramTypeInfos == NULL)
+    {
+        data->funcData.paramTypeInfos =
+            calloc((size_t)data->funcData.paramCount, sizeof(typeDesc*));
+        if (data->funcData.paramTypeInfos == NULL)
+        {
+            return ERROR_INTERNAL;
+        }
+    }
+
+    typeDesc* copy = NULL;
+    if (desc != NULL)
+    {
+        copy = typeDescClone(desc);
+        if (copy == NULL)
+        {
+            return ERROR_INTERNAL;
+        }
+    }
+
+    typeDescDestroy(data->funcData.paramTypeInfos[index]);
+    data->funcData.paramTypeInfos[index] = copy;
+    return 0;
+}
+
+const typeDesc* symtableGetVarTypeDesc(symtable* table, const char* key)
+{
+    if (table == NULL || key == NULL)
+    {
+        return NULL;
+    }
+
+    nodeData* data = stackFindVar(key, table);
+    if (data == NULL || data->type != TYPE_VARIABLE)
+    {
+        return NULL;
+    }
+
+    return data->varData.typeInfo;
+}
+
+int symtableSetVarTypeDesc(symtable* table, const char* key,
+                           const typeDesc* desc)
+{
+    if (table == NULL || key == NULL)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    nodeData* data = stackFindVar(key, table);
+    if (data == NULL || data->type != TYPE_VARIABLE)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    typeDesc* copy = NULL;
+    if (desc != NULL)
+    {
+        copy = typeDescClone(desc);
+        if (copy == NULL)
+        {
+            return ERROR_INTERNAL;
+        }
+    }
+
+    typeDescDestroy(data->varData.typeInfo);
+    data->varData.typeInfo = copy;
+    return 0;
+}
 int symtableGetFuncParamCount(symtable* table, const char* key)
 {
     if (table == NULL || key == NULL)
