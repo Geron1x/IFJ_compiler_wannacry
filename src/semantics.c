@@ -40,7 +40,7 @@ static dataType checkLambdaExpr(astNode* lambdaNode, symtable* globalTable,
                                 Errors* err);
 static int resolveFuncVarReference(astNode* exprNode,
                                    const typeDesc* expectedDesc,
-                                   symtable* globalTable);
+                                   symtable* globalTable, bool* fromBody);
 static void typeDescArrayDestroy(typeDesc** arr, int count);
 static void analyzeEnd(astNode* node, bool* allReturn, bool* allUnit);
 static dataType resolveBodyType(astNode* bodyNode, dataType declaredType,
@@ -1709,8 +1709,12 @@ static dataType checkLambdaExpr(astNode* lambdaNode, symtable* globalTable,
 /** check whether key of some identifier is not a variable but a function */
 static int resolveFuncVarReference(astNode* exprNode,
                                    const typeDesc* expectedDesc,
-                                   symtable* globalTable)
+                                   symtable* globalTable, bool* fromBody)
 {
+    if (fromBody != NULL)
+    {
+        *fromBody = false;
+    }
     if (exprNode == NULL || exprNode->nodeType != AST_EXPR_VAR ||
         exprNode->data.varData.key == NULL)
     {
@@ -1721,7 +1725,6 @@ static int resolveFuncVarReference(astNode* exprNode,
     int paramCount = symtableGetFuncParamCount(globalTable, key);
     if (paramCount == -1)
     {
-        /** such function was not found */
         return ERROR_UNDEFINED_NAME;
     }
 
@@ -1741,6 +1744,10 @@ static int resolveFuncVarReference(astNode* exprNode,
     {
         if (symtableGetFuncIsAnalyzing(globalTable, key))
         {
+            if (fromBody != NULL)
+            {
+                *fromBody = true;
+            }
             return ERROR_TYPE_MISMATCH;
         }
         astNode* funcNode = symtableGetFuncNode(globalTable, key);
@@ -1758,6 +1765,10 @@ static int resolveFuncVarReference(astNode* exprNode,
         free(callContext);
         if (status != 0)
         {
+            if (fromBody != NULL)
+            {
+                *fromBody = true;
+            }
             return status;
         }
         funcRetType = symtableGetFuncReturn(globalTable, key);
@@ -2171,10 +2182,12 @@ static dataType checkExprWithExpected(astNode* expr,
         symtableGetVarType(globalTable, expr->data.varData.key) ==
             S_TYPE_UNKNOWN)
     {
-        *err = resolveFuncVarReference(expr, expectedDesc, globalTable);
+        bool fromBody = false;
+        *err =
+            resolveFuncVarReference(expr, expectedDesc, globalTable, &fromBody);
         if (*err != 0)
         {
-            if (*err == ERROR_TYPE_MISMATCH)
+            if (*err == ERROR_TYPE_MISMATCH && !fromBody)
             {
                 *err = mismatchCode;
             }
