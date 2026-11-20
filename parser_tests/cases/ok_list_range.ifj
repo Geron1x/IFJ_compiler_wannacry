@@ -1,0 +1,5 @@
+import ifj26.*
+@main def m(): Unit =
+  val a = List.range(1, 10)
+  val b = List.range(0, 10, 3)
+  print(a(2) + b.head)

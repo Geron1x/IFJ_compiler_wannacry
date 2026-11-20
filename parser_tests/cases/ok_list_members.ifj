@@ -1,0 +1,11 @@
+import ifj26.*
+@main def m(): Unit =
+  val a = List(1, 2, 6, 89, 20, 1)
+  val h = a.head + a.tail.head * 2
+  val s: String = a.take(2).toString
+  val d = a.drop(1)(0) - a.slice(1, 3).head
+  val f = a.filter((x: Int) => x > 2)
+  val t = a.takeWhile((x: Int) => x < 10)
+  val w = a.dropWhile((x: Int) => x < 10)
+  val n = -a.head + (a).head + (a.drop(1)).take(1)(0)
+  print(List(1, 2).head)

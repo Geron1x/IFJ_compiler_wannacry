@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val l = List(1)
+  val h = l.5
