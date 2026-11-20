@@ -344,6 +344,8 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         case TYPE_INTERP_START:
         case TYPE_TRUE:
         case TYPE_FALSE:
+        // Word List starts a list value
+        case TYPE_LIST:
             return PS_OPERAND;
         // Any other token ends the expression
         default:
@@ -507,12 +509,33 @@ static int parseCallChain(parcerContext* ctx, astNode** out)
     return ERROR_SUCCESS;
 }
 
+// List value: word List and items in parentheses, read like call arguments
+static int parseListWord(parcerContext* ctx, astNode** out)
+{
+    CHECK_ERR(peek(ctx));
+    if (ctx->peekToken.type != TYPE_LEFT_PAREN)
+    {
+        fprintf(stderr, "Syntax err in line %d: expected ( after List\n",
+                ctx->currentToken.line);
+        return ERROR_SYNTAX;
+    }
+
+    // Items become children, then maybe an index like List(1, 2)(0)
+    CHECK_ERR(astCreateListLiteral(out));
+    CHECK_ERR(advance(ctx));
+    CHECK_ERR(parseCallArgs(ctx, *out));
+    return parseCallChain(ctx, out);
+}
+
 // Read one operand and build its node: literal, name, call or ()
 static int precConsumeOperand(parcerContext* ctx, astNode** out)
 {
     // Interpolated string is one operand
     if (ctx->currentToken.type == TYPE_INTERP_START)
         return parseInterpolation(ctx, out);
+
+    // List value is one operand
+    if (ctx->currentToken.type == TYPE_LIST) return parseListWord(ctx, out);
 
     // If value in parentheses is one operand
     if (ctx->currentToken.type == TYPE_LEFT_PAREN &&
@@ -683,6 +706,7 @@ bool canStartExpression(Type type)
         case TYPE_TRUE:
         case TYPE_FALSE:
         case TYPE_IF:
+        case TYPE_LIST:
             return true;
         default:
             return false;

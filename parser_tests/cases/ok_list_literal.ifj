@@ -1,0 +1,13 @@
+import ifj26.*
+@main def m(): Unit =
+  val a = List(1, 2, 3)
+  val e: List[Int] = List()
+  val n: List[List[Int]] = List(List(1), List())
+  val t = List(
+    1,
+    2,
+  )
+  val x = a(0) + List(4, 5)(1) + n(0)(0)
+  print(x)
+  print(List("a", "b"))
+  List(7)
