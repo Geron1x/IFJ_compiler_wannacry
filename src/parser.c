@@ -607,6 +607,7 @@ int parseStatement(parcerContext* ctx, astNode** out)
         case TYPE_TRUE:
         case TYPE_FALSE:
         case TYPE_LEFT_PAREN:
+        case TYPE_LIST:
             return parseExpression(ctx, out);
         // Line cannot start with an operator
         case TYPE_ADD:
