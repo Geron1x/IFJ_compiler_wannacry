@@ -509,13 +509,56 @@ static int parseCallChain(parcerContext* ctx, astNode** out)
     return ERROR_SUCCESS;
 }
 
+// Members after a value: .name or .name(args), as many as written
+// Each member takes the value so far, out always holds the whole tree
+static int parseMembers(parcerContext* ctx, astNode** out)
+{
+    while (ctx->currentToken.type == TYPE_DOT)
+    {
+        // Name of the member comes right after the dot
+        CHECK_ERR(advance(ctx));
+        if (ctx->currentToken.type != TYPE_IDENTIFIER)
+        {
+            fprintf(stderr, "Syntax err in line %d: expected member name\n",
+                    ctx->currentToken.line);
+            return ERROR_SYNTAX;
+        }
+        CHECK_ERR(peek(ctx));
+        bool hasArgs = ctx->peekToken.type == TYPE_LEFT_PAREN;
+
+        // Make the node before advance frees the name
+        astNode* member = NULL;
+        CHECK_ERR(astCreateMember(ctx->currentToken.value.identifier, *out,
+                                  hasArgs, &member));
+        *out = member;
+        CHECK_ERR(advance(ctx));
+
+        // Arguments go after the receiver, then maybe an index like
+        // lst.take(2)(0)
+        if (hasArgs)
+        {
+            CHECK_ERR(parseCallArgs(ctx, *out));
+            CHECK_ERR(parseCallChain(ctx, out));
+        }
+    }
+    return ERROR_SUCCESS;
+}
+
 // List value: word List and items in parentheses, read like call arguments
+// Before a dot the word is the receiver of List.range
 static int parseListWord(parcerContext* ctx, astNode** out)
 {
     CHECK_ERR(peek(ctx));
+
+    // Members after the word are read by parseMembers
+    if (ctx->peekToken.type == TYPE_DOT)
+    {
+        CHECK_ERR(astCreateVarExpr("List", out));
+        return advance(ctx);
+    }
     if (ctx->peekToken.type != TYPE_LEFT_PAREN)
     {
-        fprintf(stderr, "Syntax err in line %d: expected ( after List\n",
+        fprintf(stderr, "Syntax err in line %d: expected ( or . after List\n",
                 ctx->currentToken.line);
         return ERROR_SYNTAX;
     }
@@ -586,7 +629,10 @@ static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol* in)
     CHECK_ERR(precStackPush(stack, item));
     if (*in == PS_OPERAND)
     {
-        return precConsumeOperand(ctx, &stack->items[stack->count - 1].node);
+        astNode** node = &stack->items[stack->count - 1].node;
+        CHECK_ERR(precConsumeOperand(ctx, node));
+        // Members right after the operand, like lst.head
+        return parseMembers(ctx, node);
     }
     CHECK_ERR(advance(ctx));
     if (*in != PS_LPAREN || ctx->currentToken.type != TYPE_IDENTIFIER)
@@ -647,6 +693,12 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
             // Folding reads no token, so go to the next step at once
             case '>':
                 CHECK_ERR(precReduce(stack, ctx->currentToken.line));
+                // Members after a value in parentheses, like (a ++ b).head
+                if (top == PS_RPAREN && ctx->currentToken.type == TYPE_DOT)
+                {
+                    CHECK_ERR(parseMembers(
+                        ctx, &stack->items[stack->count - 1].node));
+                }
                 continue;
             default:
                 fprintf(stderr, "Syntax err in line %d: invalid expression\n",
