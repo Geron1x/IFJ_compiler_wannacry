@@ -171,6 +171,9 @@ static int precBinaryOp(Type type, astOpType* op)
         case TYPE_SUB:
             *op = AST_OP_SUB;
             break;
+        case TYPE_CONCAT:
+            *op = AST_OP_CONCAT;
+            break;
         case TYPE_LESSER:
             *op = AST_OP_L;
             break;
@@ -303,6 +306,9 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         case TYPE_ADD:
         case TYPE_SUB:
             return expectOperand ? PS_UNARY : PS_ADD_SUB;
+        // List join has the level of plus and is never unary
+        case TYPE_CONCAT:
+            return PS_ADD_SUB;
         // Logical not is always unary
         case TYPE_EXCLAMATION:
             return PS_UNARY;

@@ -1,0 +1,8 @@
+import ifj26.*
+@main def m(): Unit =
+  val a = List(1, 2)
+  val b = List(3)
+  val c = a ++ b ++ List(4, 5)
+  val d = (a ++ b).head + a.tail.head * 2
+  val e = a ++ b.tail ++ a.drop(1)
+  print(List(1) ++ List(2))
