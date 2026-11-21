@@ -930,14 +930,6 @@ int joinGuard(astNode** guard, astNode* cond)
 // Make the loop node, guards go into the body as one if
 int buildFor(ForParts* parts, astNode** out)
 {
-    // Loop over a list needs nodes the tree does not have yet
-    if (!parts->isRange)
-    {
-        fprintf(stderr,
-                "Internal err: for over a list is not supported in AST yet\n");
-        return ERROR_INTERNAL;
-    }
-
     // Body runs only when all guards are true
     if (parts->guard != NULL)
     {
@@ -948,8 +940,17 @@ int buildFor(ForParts* parts, astNode** out)
         CHECK_ERR(wrapInBlock(guarded, &parts->body));
     }
 
-    CHECK_ERR(astCreateFor(parts->name, parts->from, parts->end, parts->step,
-                           parts->isInclusive, parts->body, 0, out));
+    // Loop over a list keeps only the list and the body
+    if (!parts->isRange)
+    {
+        CHECK_ERR(astCreateForEach(parts->name, parts->from, parts->body, out));
+    }
+    else
+    {
+        CHECK_ERR(astCreateFor(parts->name, parts->from, parts->end,
+                               parts->step, parts->isInclusive, parts->body, 0,
+                               out));
+    }
 
     // Loop node owns these parts now
     parts->from = NULL;
