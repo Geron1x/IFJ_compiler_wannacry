@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val a = List(1)
+  val c = ++a
