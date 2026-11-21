@@ -1,0 +1,4 @@
+import ifj26.*
+@main def m(): Unit =
+  val lst = List(1, 2)
+  for x <- lst by 2 do print(x)

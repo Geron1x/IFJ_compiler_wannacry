@@ -1,0 +1,14 @@
+import ifj26.*
+@main def m(): Unit =
+  val lst = List(1, 2, 6, 89)
+  val b = List(7)
+  for x <- lst do print(x)
+  for x <- List.range(1, 5) if x != 3 do
+    print(x)
+  for x <- lst ++ b if x > 1 if x < 50 do print(x)
+  for x <- lst.tail do print(x + 1)
+  for
+    x <- lst
+    if x != 2
+  do
+    print(x)
