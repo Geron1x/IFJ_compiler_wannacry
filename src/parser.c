@@ -634,15 +634,15 @@ static int parseValue(parcerContext* ctx, astNode** out)
 
     // Constant node owns the value and the type, on failure they are freed here
     if (err == ERROR_SUCCESS)
-    {
         err = astCreateVarDef(name, type, true, expr, out);
-        if (err != ERROR_SUCCESS)
-            astDestroy(expr);
-        else
-        {
-            astSetTypeDesc(*out, desc);
-            desc = NULL;
-        }
+    if (err == ERROR_SUCCESS)
+    {
+        astSetTypeDesc(*out, desc);
+        desc = NULL;
+    }
+    else
+    {
+        astDestroy(expr);
     }
     typeDescDestroy(desc);
     free(name);
@@ -665,15 +665,15 @@ static int parseVariable(parcerContext* ctx, astNode** out)
 
     // Variable node owns the value and the type, on failure they are freed here
     if (err == ERROR_SUCCESS)
-    {
         err = astCreateVarDef(name, type, false, expr, out);
-        if (err != ERROR_SUCCESS)
-            astDestroy(expr);
-        else
-        {
-            astSetTypeDesc(*out, desc);
-            desc = NULL;
-        }
+    if (err == ERROR_SUCCESS)
+    {
+        astSetTypeDesc(*out, desc);
+        desc = NULL;
+    }
+    else
+    {
+        astDestroy(expr);
     }
     typeDescDestroy(desc);
     free(name);
