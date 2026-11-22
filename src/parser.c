@@ -64,7 +64,6 @@ static int parseFunctionBody(parcerContext* ctx, astNode** out);
 static int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
                          bool isMain, astNode* body, ParamList* params,
                          astNode** out);
-static int parseLambdaBody(parcerContext* ctx, astNode** out);
 static int buildLambda(astNode* body, ParamList* params, astNode** out);
 static int appendParams(astNode* node, ParamList* params);
 static int paramListPush(ParamList* list, astNode* param);
@@ -99,7 +98,7 @@ static int parseOneLineBranch(parcerContext* ctx, astNode** out);
 static int skipNewLineBeforeElse(parcerContext* ctx);
 static int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
                                   astNode** thenBlock, astNode** elseBlock);
-static int parseValueBranch(parcerContext* ctx, astNode** out);
+static int parseBlockOrValue(parcerContext* ctx, astNode** out);
 static int parseStatementEnd(parcerContext* ctx);
 
 
@@ -345,34 +344,24 @@ static int parseParam(parcerContext* ctx, ParamList* params)
     return err;
 }
 
-// Body after =: indented block, or one expression on the same line
+// Body after =: indented block, or one value on the same line
 static int parseFunctionBody(parcerContext* ctx, astNode** out)
 {
-    // New line after = means a block body
-    if (ctx->currentToken.type == TYPE_EOL)
-    {
-        CHECK_ERR(advance(ctx));
-        return parseBlock(ctx, out);
-    }
+    CHECK_ERR(parseBlockOrValue(ctx, out));
 
-    // Otherwise the body is one expression on the same line
-    astNode* expr = NULL;
-    CHECK_ERR(parseExpressionOrIf(ctx, &expr));
-
-    // Nothing else may follow it on this line, a block branch already ended it
+    // Nothing else may follow a one-line body, a block already ended the line
     if (ctx->currentToken.type != TYPE_EOL &&
         ctx->currentToken.type != TYPE_EOF && ctx->prevType != TYPE_DEDENT)
     {
-        astDestroy(expr);
+        astDestroy(*out);
+        *out = NULL;
         fprintf(stderr,
                 "Syntax error in line %d: expected end of line after function "
                 "body\n",
                 ctx->currentToken.line);
         return ERROR_SYNTAX;
     }
-
-    // One line body is a block with one element
-    return wrapInBlock(expr, out);
+    return ERROR_SUCCESS;
 }
 
 // Make the function node, then give it the parameters one by one
@@ -412,27 +401,12 @@ int parseLambda(parcerContext* ctx, astNode** out)
     int err = parseParams(ctx, &params);
     if (err == ERROR_SUCCESS) err = match(ctx, TYPE_RIGHT_PAREN);
     if (err == ERROR_SUCCESS) err = match(ctx, TYPE_ARROW);
-    if (err == ERROR_SUCCESS) err = parseLambdaBody(ctx, &body);
+    if (err == ERROR_SUCCESS) err = parseBlockOrValue(ctx, &body);
     if (err == ERROR_SUCCESS) err = buildLambda(body, &params, out);
 
     // Parameters not given to the lambda are freed here
     paramListFree(&params);
     return err;
-}
-
-// Lambda body: indented block after new line, or one value on the same line
-static int parseLambdaBody(parcerContext* ctx, astNode** out)
-{
-    if (ctx->currentToken.type == TYPE_EOL)
-    {
-        CHECK_ERR(advance(ctx));
-        return parseBlock(ctx, out);
-    }
-
-    // Semantics wants a block, so one value is wrapped
-    astNode* value = NULL;
-    CHECK_ERR(parseExpressionOrIf(ctx, &value));
-    return wrapInBlock(value, out);
 }
 
 // Lambda node: body first, then the parameters, return type is found by
@@ -1049,7 +1023,7 @@ static int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
 {
     CHECK_ERR(parseExpression(ctx, cond));
     CHECK_ERR(match(ctx, TYPE_THEN));
-    CHECK_ERR(parseValueBranch(ctx, thenBlock));
+    CHECK_ERR(parseBlockOrValue(ctx, thenBlock));
 
     // Else is required, it may stand on the next line
     CHECK_ERR(skipNewLineBeforeElse(ctx));
@@ -1069,17 +1043,21 @@ static int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
         CHECK_ERR(parseIfExpression(ctx, &inner));
         return wrapInBlock(inner, elseBlock);
     }
-    return parseValueBranch(ctx, elseBlock);
+    return parseBlockOrValue(ctx, elseBlock);
 }
 
-// Branch of an if value: indented block or one value on the same line
-static int parseValueBranch(parcerContext* ctx, astNode** out)
+// Indented block after a new line, or one value on the same line as a block
+// Reads branches of an if value, lambda bodies and function bodies
+static int parseBlockOrValue(parcerContext* ctx, astNode** out)
 {
+    // New line opens an indented block
     if (ctx->currentToken.type == TYPE_EOL)
     {
         CHECK_ERR(advance(ctx));
         return parseBlock(ctx, out);
     }
+
+    // One value is wrapped, because semantics wants a block
     astNode* value = NULL;
     CHECK_ERR(parseExpressionOrIf(ctx, &value));
     return wrapInBlock(value, out);
