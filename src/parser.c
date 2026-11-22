@@ -1259,7 +1259,7 @@ static int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count)
 {
     if (ctx->currentToken.type == TYPE_RIGHT_PAREN) return ERROR_SUCCESS;
 
-    while (1)
+    while (true)
     {
         // Parse one type and add it to the end of the array
         dataType kind = S_TYPE_UNKNOWN;

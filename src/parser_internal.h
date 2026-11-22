@@ -39,7 +39,6 @@ typedef struct
     {                                           \
         int _err = (call);                      \
         if (_err != ERROR_SUCCESS) return _err; \
-                                                \
     } while (0)
 
 /**

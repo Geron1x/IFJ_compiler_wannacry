@@ -326,8 +326,7 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
         case TYPE_EQUAL:
         case TYPE_NOT_EQUAL:
             return PS_EQ;
-        // Empty parentheses are the Unit value
-        // Unit
+        // Parenthesis with ) or if right after it is one operand
         case TYPE_LEFT_PAREN:
             return (ctx->peekToken.type == TYPE_RIGHT_PAREN ||
                     ctx->peekToken.type == TYPE_IF)
@@ -553,7 +552,8 @@ static int parseListWord(parcerContext* ctx, astNode** out)
     return parseCallChain(ctx, out);
 }
 
-// Read one operand and build its node: literal, name, call or ()
+// Read one operand and build its node: literal, name, call, list,
+// interpolated string, (), or if and lambda in parentheses
 static int precConsumeOperand(parcerContext* ctx, astNode** out)
 {
     // Interpolated string is one operand
@@ -683,9 +683,9 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
     CHECK_ERR(
         precStackPush(stack, (StackItem){.kind = ITEM_TERM, .sym = PS_END}));
 
-    while (1)
+    while (true)
     {
-        // For ( look ahead to see if it is ()
+        // For ( look ahead: ) or if after it makes one operand
         if (ctx->currentToken.type == TYPE_LEFT_PAREN) CHECK_ERR(peek(ctx));
 
         PrecSymbol in = precClassify(ctx, depth, expectOperand);
