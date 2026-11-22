@@ -409,27 +409,6 @@ static int interpToStr(astNode* value, astNode** out)
     return ERROR_SUCCESS;
 }
 
-// Join a new part to the string built so far with plus
-// The part is freed on failure, the result stays with the caller
-static int interpJoin(astNode** result, astNode* part)
-{
-    // First part becomes the whole result
-    if (*result == NULL)
-    {
-        *result = part;
-        return ERROR_SUCCESS;
-    }
-    astNode* sum = NULL;
-    int err = astCreateBinary(AST_OP_ADD, *result, part, &sum);
-    if (err != ERROR_SUCCESS)
-    {
-        astDestroy(part);
-        return err;
-    }
-    *result = sum;
-    return ERROR_SUCCESS;
-}
-
 // Read one part of the string: text, $name or ${expression}
 static int interpPart(parcerContext* ctx, astNode** part)
 {
@@ -491,7 +470,7 @@ static int parseInterpolation(parcerContext* ctx, astNode** out)
     {
         astNode* part = NULL;
         err = interpPart(ctx, &part);
-        if (err == ERROR_SUCCESS) err = interpJoin(&result, part);
+        if (err == ERROR_SUCCESS) err = joinBinary(&result, AST_OP_ADD, part);
     }
 
     // Empty string without parts is just an empty literal
