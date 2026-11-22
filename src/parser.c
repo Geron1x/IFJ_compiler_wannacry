@@ -139,7 +139,6 @@ int parse(astNode** out)
         return err;
     }
 
-
     // Print the tree only in a build with -DAST_DEBUG
 #ifdef AST_DEBUG
     astDump(prog, 0);
@@ -147,7 +146,7 @@ int parse(astNode** out)
 
     // Give the finished tree to the caller
     *out = prog;
-    return err;
+    return ERROR_SUCCESS;
 }
 
 // ============================================================
