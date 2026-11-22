@@ -289,6 +289,14 @@ static bool isRangeWord(const char* name)
            strcmp(name, "by") == 0;
 }
 
+// True if the current token is to or until, the start of a range
+static bool isRangeStart(const parcerContext* ctx)
+{
+    return ctx->currentToken.type == TYPE_IDENTIFIER &&
+           (strcmp(ctx->currentToken.value.identifier, "to") == 0 ||
+            strcmp(ctx->currentToken.value.identifier, "until") == 0);
+}
+
 // Find the group of the current token, for ( the caller must peek first
 // expectOperand tells if + and - are unary here
 static PrecSymbol precClassify(parcerContext* ctx, int depth,
@@ -626,6 +634,47 @@ static int precConsumeOperand(parcerContext* ctx, astNode** out)
     return advance(ctx);
 }
 
+// Range in parentheses, like (1 to 5) or (0 until n by 2)
+// The value on the stack is the start, the range node takes its place
+static int precParseRange(parcerContext* ctx, astNode** node)
+{
+    // Word to keeps the last number, until leaves it out
+    bool isInclusive = strcmp(ctx->currentToken.value.identifier, "to") == 0;
+    CHECK_ERR(advance(ctx));
+
+    // End of the range, then maybe a step after by
+    astNode* end = NULL;
+    astNode* step = NULL;
+    int err = parseExpression(ctx, &end);
+    if (err == ERROR_SUCCESS && ctx->currentToken.type == TYPE_IDENTIFIER &&
+        strcmp(ctx->currentToken.value.identifier, "by") == 0)
+    {
+        err = advance(ctx);
+        if (err == ERROR_SUCCESS) err = parseExpression(ctx, &step);
+    }
+
+    // The range must close right away, so (1 to 5 to 6) is an error
+    if (err == ERROR_SUCCESS && ctx->currentToken.type != TYPE_RIGHT_PAREN)
+    {
+        fprintf(stderr, "Syntax err in line %d: expected ) after range\n",
+                ctx->currentToken.line);
+        err = ERROR_SYNTAX;
+    }
+
+    // Start stays on the stack if something failed, it is freed there
+    astNode* range = NULL;
+    if (err == ERROR_SUCCESS)
+        err = astCreateRange(*node, end, step, isInclusive, &range);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(end);
+        astDestroy(step);
+        return err;
+    }
+    *node = range;
+    return ERROR_SUCCESS;
+}
+
 // Push the token group, an operand gets its node right on the stack
 // Parenthesis with name and colon after it is a lambda, in becomes operand
 static int precShift(parcerContext* ctx, PrecStack* stack, PrecSymbol* in)
@@ -684,6 +733,14 @@ static int precParse(parcerContext* ctx, PrecStack* stack)
             fprintf(stderr, "Syntax err in line %d: expected expression\n",
                     ctx->currentToken.line);
             return ERROR_SYNTAX;
+        }
+
+        // Word to or until after a value in parentheses starts a range
+        if (top == PS_LPAREN && in == PS_END && isRangeStart(ctx))
+        {
+            CHECK_ERR(
+                precParseRange(ctx, &stack->items[stack->count - 1].node));
+            continue;
         }
 
         // Table says what to do next
