@@ -37,67 +37,70 @@ typedef struct
 } ForParts;
 
 // Work with tokens
-void freeTokenValue(Token* token);
-int matchDataType(parcerContext* ctx, dataType* type);
-int takeName(parcerContext* ctx, char** name);
-int checkTrailingComma(parcerContext* ctx, int commaLine);
+static void freeTokenValue(Token* token);
+static int matchDataType(parcerContext* ctx, dataType* type);
+static int takeName(parcerContext* ctx, char** name);
+static int checkTrailingComma(parcerContext* ctx, int commaLine);
 
 // Types: simple, list and function
-int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc);
-int parseTypeDesc(parcerContext* ctx, dataType* kind, typeDesc** desc);
-int parseListType(parcerContext* ctx, dataType* kind, typeDesc** desc);
-int parseFuncType(parcerContext* ctx, dataType* kind, typeDesc** desc);
-int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count);
-void typeListFree(typeDesc** list, int count);
+static int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc);
+static int parseTypeDesc(parcerContext* ctx, dataType* kind, typeDesc** desc);
+static int parseListType(parcerContext* ctx, dataType* kind, typeDesc** desc);
+static int parseFuncType(parcerContext* ctx, dataType* kind, typeDesc** desc);
+static int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count);
+static void typeListFree(typeDesc** list, int count);
 
 // Program, prologue and functions
-int parseProgram(parcerContext* ctx, astNode* prog);
-int parsePrologue(parcerContext* ctx);
-int addFunction(parcerContext* ctx, astNode* prog, bool isMain);
-int parseFunction(parcerContext* ctx, bool isMain, astNode** out);
-int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
-                       typeDesc** retDesc, astNode** body);
-int parseParams(parcerContext* ctx, ParamList* params);
-int parseParam(parcerContext* ctx, ParamList* params);
-int parseFunctionBody(parcerContext* ctx, astNode** out);
-int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
-                  bool isMain, astNode* body, ParamList* params, astNode** out);
-int parseLambdaBody(parcerContext* ctx, astNode** out);
-int buildLambda(astNode* body, ParamList* params, astNode** out);
-int appendParams(astNode* node, ParamList* params);
-int paramListPush(ParamList* list, astNode* param);
-void paramListFree(ParamList* list);
-int wrapInBlock(astNode* node, astNode** out);
+static int parseProgram(parcerContext* ctx, astNode* prog);
+static int parsePrologue(parcerContext* ctx);
+static int addFunction(parcerContext* ctx, astNode* prog, bool isMain);
+static int parseFunction(parcerContext* ctx, bool isMain, astNode** out);
+static int parseFunctionParts(parcerContext* ctx, ParamList* params,
+                              dataType* retType, typeDesc** retDesc,
+                              astNode** body);
+static int parseParams(parcerContext* ctx, ParamList* params);
+static int parseParam(parcerContext* ctx, ParamList* params);
+static int parseFunctionBody(parcerContext* ctx, astNode** out);
+static int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
+                         bool isMain, astNode* body, ParamList* params,
+                         astNode** out);
+static int parseLambdaBody(parcerContext* ctx, astNode** out);
+static int buildLambda(astNode* body, ParamList* params, astNode** out);
+static int appendParams(astNode* node, ParamList* params);
+static int paramListPush(ParamList* list, astNode* param);
+static void paramListFree(ParamList* list);
+static int wrapInBlock(astNode* node, astNode** out);
 
 // Statements inside function body
-int parseBlock(parcerContext* ctx, astNode** out);
-int parseBlockStatements(parcerContext* ctx, astNode* block);
-int parseStatement(parcerContext* ctx, astNode** out);
-int parseValue(parcerContext* ctx, astNode** out);
-int parseVariable(parcerContext* ctx, astNode** out);
-int parseTypeAndValue(parcerContext* ctx, dataType* type, typeDesc** desc,
-                      astNode** expr);
-int parseAssignment(parcerContext* ctx, astNode** out);
-int parseReturn(parcerContext* ctx, astNode** out);
-int parseIf(parcerContext* ctx, astNode** out);
-int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
-                 astNode** elseBlock);
-int parseElseIf(parcerContext* ctx, astNode** out);
-int parseWhile(parcerContext* ctx, astNode** out);
-int parseFor(parcerContext* ctx, astNode** out);
-int parseForHeader(parcerContext* ctx, ForParts* parts);
-int parseForSource(parcerContext* ctx, ForParts* parts);
-int parseForGuards(parcerContext* ctx, bool isMultiLine, astNode** guard);
-int joinGuard(astNode** guard, astNode* cond);
-int buildFor(ForParts* parts, astNode** out);
-void forPartsFree(ForParts* parts);
-int parseBranch(parcerContext* ctx, astNode** out);
-int parseOneLineBranch(parcerContext* ctx, astNode** out);
-int skipNewLineBeforeElse(parcerContext* ctx);
-int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
-                           astNode** thenBlock, astNode** elseBlock);
-int parseValueBranch(parcerContext* ctx, astNode** out);
-int parseStatementEnd(parcerContext* ctx);
+static int parseBlock(parcerContext* ctx, astNode** out);
+static int parseBlockStatements(parcerContext* ctx, astNode* block);
+static int parseStatement(parcerContext* ctx, astNode** out);
+static int parseValue(parcerContext* ctx, astNode** out);
+static int parseVariable(parcerContext* ctx, astNode** out);
+static int parseTypeAndValue(parcerContext* ctx, dataType* type,
+                             typeDesc** desc, astNode** expr);
+static int parseAssignment(parcerContext* ctx, astNode** out);
+static int parseReturn(parcerContext* ctx, astNode** out);
+static int parseIf(parcerContext* ctx, astNode** out);
+static int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
+                        astNode** elseBlock);
+static int parseElseIf(parcerContext* ctx, astNode** out);
+static int parseWhile(parcerContext* ctx, astNode** out);
+static int parseFor(parcerContext* ctx, astNode** out);
+static int parseForHeader(parcerContext* ctx, ForParts* parts);
+static int parseForSource(parcerContext* ctx, ForParts* parts);
+static int parseForGuards(parcerContext* ctx, bool isMultiLine,
+                          astNode** guard);
+static int joinGuard(astNode** guard, astNode* cond);
+static int buildFor(ForParts* parts, astNode** out);
+static void forPartsFree(ForParts* parts);
+static int parseBranch(parcerContext* ctx, astNode** out);
+static int parseOneLineBranch(parcerContext* ctx, astNode** out);
+static int skipNewLineBeforeElse(parcerContext* ctx);
+static int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
+                                  astNode** thenBlock, astNode** elseBlock);
+static int parseValueBranch(parcerContext* ctx, astNode** out);
+static int parseStatementEnd(parcerContext* ctx);
 
 
 // ============================================================
@@ -153,7 +156,7 @@ int parse(astNode** out)
 // ============================================================
 
 // Program is prologue and then functions, each function is added to prog
-int parseProgram(parcerContext* ctx, astNode* prog)
+static int parseProgram(parcerContext* ctx, astNode* prog)
 {
     // Read the first token
     CHECK_ERR(advance(ctx));
@@ -198,7 +201,7 @@ int parseProgram(parcerContext* ctx, astNode* prog)
 }
 
 // Prologue is the line import ifj26.*
-int parsePrologue(parcerContext* ctx)
+static int parsePrologue(parcerContext* ctx)
 {
     CHECK_ERR(match(ctx, TYPE_IMPORT));
 
@@ -226,7 +229,7 @@ int parsePrologue(parcerContext* ctx)
 }
 
 // Parse one function and add it to the program
-int addFunction(parcerContext* ctx, astNode* prog, bool isMain)
+static int addFunction(parcerContext* ctx, astNode* prog, bool isMain)
 {
     astNode* func = NULL;
     CHECK_ERR(parseFunction(ctx, isMain, &func));
@@ -234,7 +237,7 @@ int addFunction(parcerContext* ctx, astNode* prog, bool isMain)
 }
 
 // Function: def, name, parameters, return type, =, body
-int parseFunction(parcerContext* ctx, bool isMain, astNode** out)
+static int parseFunction(parcerContext* ctx, bool isMain, astNode** out)
 {
     // Take the name, it must be freed on every return below
     CHECK_ERR(match(ctx, TYPE_DEF));
@@ -266,8 +269,9 @@ int parseFunction(parcerContext* ctx, bool isMain, astNode** out)
 }
 
 // Parameters in parentheses, optional return type, = and the body
-int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
-                       typeDesc** retDesc, astNode** body)
+static int parseFunctionParts(parcerContext* ctx, ParamList* params,
+                              dataType* retType, typeDesc** retDesc,
+                              astNode** body)
 {
     CHECK_ERR(match(ctx, TYPE_LEFT_PAREN));
     CHECK_ERR(parseParams(ctx, params));
@@ -285,7 +289,7 @@ int parseFunctionParts(parcerContext* ctx, ParamList* params, dataType* retType,
 }
 
 // Parameters separated by commas, comma before ) only with new line
-int parseParams(parcerContext* ctx, ParamList* params)
+static int parseParams(parcerContext* ctx, ParamList* params)
 {
     // Parameters exist if the parenthesis is not closed right away
     if (ctx->currentToken.type == TYPE_RIGHT_PAREN)
@@ -311,7 +315,7 @@ int parseParams(parcerContext* ctx, ParamList* params)
 }
 
 // One parameter: name, colon, type, kept in the list as a constant
-int parseParam(parcerContext* ctx, ParamList* params)
+static int parseParam(parcerContext* ctx, ParamList* params)
 {
     // Take the name, it must be freed on every return below
     char* name = NULL;
@@ -342,7 +346,7 @@ int parseParam(parcerContext* ctx, ParamList* params)
 }
 
 // Body after =: indented block, or one expression on the same line
-int parseFunctionBody(parcerContext* ctx, astNode** out)
+static int parseFunctionBody(parcerContext* ctx, astNode** out)
 {
     // New line after = means a block body
     if (ctx->currentToken.type == TYPE_EOL)
@@ -372,8 +376,9 @@ int parseFunctionBody(parcerContext* ctx, astNode** out)
 }
 
 // Make the function node, then give it the parameters one by one
-int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
-                  bool isMain, astNode* body, ParamList* params, astNode** out)
+static int buildFunction(const char* name, dataType retType, typeDesc* retDesc,
+                         bool isMain, astNode* body, ParamList* params,
+                         astNode** out)
 {
     // On failure the body and the return type still belong to us
     astNode* func = NULL;
@@ -416,7 +421,7 @@ int parseLambda(parcerContext* ctx, astNode** out)
 }
 
 // Lambda body: indented block after new line, or one value on the same line
-int parseLambdaBody(parcerContext* ctx, astNode** out)
+static int parseLambdaBody(parcerContext* ctx, astNode** out)
 {
     if (ctx->currentToken.type == TYPE_EOL)
     {
@@ -432,7 +437,7 @@ int parseLambdaBody(parcerContext* ctx, astNode** out)
 
 // Lambda node: body first, then the parameters, return type is found by
 // semantics
-int buildLambda(astNode* body, ParamList* params, astNode** out)
+static int buildLambda(astNode* body, ParamList* params, astNode** out)
 {
     // On failure the body still belongs to us
     astNode* lambda = NULL;
@@ -454,7 +459,7 @@ int buildLambda(astNode* body, ParamList* params, astNode** out)
 }
 
 // Move every parameter from the list to the node
-int appendParams(astNode* node, ParamList* params)
+static int appendParams(astNode* node, ParamList* params)
 {
     // Given parameter is removed from the list, the node owns it now
     for (size_t i = 0; i < params->count; i++)
@@ -471,7 +476,7 @@ int appendParams(astNode* node, ParamList* params)
 // ============================================================
 
 // Add a parameter, double the size if needed, free it if no memory
-int paramListPush(ParamList* list, astNode* param)
+static int paramListPush(ParamList* list, astNode* param)
 {
     if (list->count == list->capacity)
     {
@@ -493,7 +498,7 @@ int paramListPush(ParamList* list, astNode* param)
 }
 
 // Free parameters that are still in the list and the list itself
-void paramListFree(ParamList* list)
+static void paramListFree(ParamList* list)
 {
     for (size_t i = 0; i < list->count; i++) astDestroy(list->items[i]);
     free(list->items);
@@ -503,7 +508,7 @@ void paramListFree(ParamList* list)
 }
 
 // Put one node into a new block, the node is freed if it fails
-int wrapInBlock(astNode* node, astNode** out)
+static int wrapInBlock(astNode* node, astNode** out)
 {
     astNode* block = NULL;
     int err = astCreateBlock(&block);
@@ -529,7 +534,7 @@ int wrapInBlock(astNode* node, astNode** out)
 // ============================================================
 
 // Block of statements with indent: body of a function, if, else or while
-int parseBlock(parcerContext* ctx, astNode** out)
+static int parseBlock(parcerContext* ctx, astNode** out)
 {
     CHECK_ERR(match(ctx, TYPE_INDENT));
 
@@ -549,7 +554,7 @@ int parseBlock(parcerContext* ctx, astNode** out)
 }
 
 // Statements of a block until its end, each becomes a child of the block
-int parseBlockStatements(parcerContext* ctx, astNode* block)
+static int parseBlockStatements(parcerContext* ctx, astNode* block)
 {
     // Block cannot be empty, so read at least one statement
     do
@@ -572,7 +577,7 @@ int parseBlockStatements(parcerContext* ctx, astNode* block)
 }
 
 // One statement: val, var, assignment, return, if, while or expression
-int parseStatement(parcerContext* ctx, astNode** out)
+static int parseStatement(parcerContext* ctx, astNode** out)
 {
     switch (ctx->currentToken.type)
     {
@@ -623,7 +628,7 @@ int parseStatement(parcerContext* ctx, astNode** out)
 }
 
 // Constant: val, name, optional type, =, value
-int parseValue(parcerContext* ctx, astNode** out)
+static int parseValue(parcerContext* ctx, astNode** out)
 {
     // Skip val and take the name, it must be freed on every return below
     CHECK_ERR(advance(ctx));
@@ -654,7 +659,7 @@ int parseValue(parcerContext* ctx, astNode** out)
 }
 
 // Variable: var, name, optional type, =, value
-int parseVariable(parcerContext* ctx, astNode** out)
+static int parseVariable(parcerContext* ctx, astNode** out)
 {
     // Skip var and take the name, it must be freed on every return below
     CHECK_ERR(advance(ctx));
@@ -685,8 +690,8 @@ int parseVariable(parcerContext* ctx, astNode** out)
 }
 
 // Optional type after colon, then = and the value
-int parseTypeAndValue(parcerContext* ctx, dataType* type, typeDesc** desc,
-                      astNode** expr)
+static int parseTypeAndValue(parcerContext* ctx, dataType* type,
+                             typeDesc** desc, astNode** expr)
 {
     if (ctx->currentToken.type == TYPE_DOUBLE_DOT)
     {
@@ -698,7 +703,7 @@ int parseTypeAndValue(parcerContext* ctx, dataType* type, typeDesc** desc,
 }
 
 // Assignment: name, =, value
-int parseAssignment(parcerContext* ctx, astNode** out)
+static int parseAssignment(parcerContext* ctx, astNode** out)
 {
     // Take the name, it must be freed on every return below
     char* name = NULL;
@@ -719,7 +724,7 @@ int parseAssignment(parcerContext* ctx, astNode** out)
 }
 
 // Return: the word return and maybe a value
-int parseReturn(parcerContext* ctx, astNode** out)
+static int parseReturn(parcerContext* ctx, astNode** out)
 {
     CHECK_ERR(advance(ctx));
 
@@ -737,7 +742,7 @@ int parseReturn(parcerContext* ctx, astNode** out)
 }
 
 // if, condition, then, body, and maybe else or else if
-int parseIf(parcerContext* ctx, astNode** out)
+static int parseIf(parcerContext* ctx, astNode** out)
 {
     CHECK_ERR(advance(ctx));
 
@@ -762,8 +767,8 @@ int parseIf(parcerContext* ctx, astNode** out)
 }
 
 // Condition, then branch and optional else branch of an if
-int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
-                 astNode** elseBlock)
+static int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
+                        astNode** elseBlock)
 {
     // Condition goes until then
     CHECK_ERR(parseExpression(ctx, cond));
@@ -788,7 +793,7 @@ int parseIfParts(parcerContext* ctx, astNode** cond, astNode** thenBlock,
 }
 
 // else if becomes a block with one inner if inside
-int parseElseIf(parcerContext* ctx, astNode** out)
+static int parseElseIf(parcerContext* ctx, astNode** out)
 {
     astNode* inner = NULL;
     CHECK_ERR(parseIf(ctx, &inner));
@@ -796,7 +801,7 @@ int parseElseIf(parcerContext* ctx, astNode** out)
 }
 
 // while, condition, do, body
-int parseWhile(parcerContext* ctx, astNode** out)
+static int parseWhile(parcerContext* ctx, astNode** out)
 {
     // Condition goes until do
     CHECK_ERR(advance(ctx));
@@ -818,7 +823,7 @@ int parseWhile(parcerContext* ctx, astNode** out)
 }
 
 // for, header, do, body
-int parseFor(parcerContext* ctx, astNode** out)
+static int parseFor(parcerContext* ctx, astNode** out)
 {
     CHECK_ERR(advance(ctx));
 
@@ -833,7 +838,7 @@ int parseFor(parcerContext* ctx, astNode** out)
 }
 
 // Loop variable, arrow, source and guards, on one line or as a block
-int parseForHeader(parcerContext* ctx, ForParts* parts)
+static int parseForHeader(parcerContext* ctx, ForParts* parts)
 {
     // New line right after for opens an indented header
     bool isMultiLine = ctx->currentToken.type == TYPE_EOL;
@@ -858,7 +863,7 @@ int parseForHeader(parcerContext* ctx, ForParts* parts)
 }
 
 // Range with to or until and optional by step, anything else is a list
-int parseForSource(parcerContext* ctx, ForParts* parts)
+static int parseForSource(parcerContext* ctx, ForParts* parts)
 {
     CHECK_ERR(parseExpression(ctx, &parts->from));
 
@@ -885,7 +890,7 @@ int parseForSource(parcerContext* ctx, ForParts* parts)
 }
 
 // Any number of guards, each is if and a condition
-int parseForGuards(parcerContext* ctx, bool isMultiLine, astNode** guard)
+static int parseForGuards(parcerContext* ctx, bool isMultiLine, astNode** guard)
 {
     while (true)
     {
@@ -907,7 +912,7 @@ int parseForGuards(parcerContext* ctx, bool isMultiLine, astNode** guard)
 
 // Join a new condition to the guards so far with and
 // The condition is freed on failure, the guard stays with the caller
-int joinGuard(astNode** guard, astNode* cond)
+static int joinGuard(astNode** guard, astNode* cond)
 {
     if (*guard == NULL)
     {
@@ -926,7 +931,7 @@ int joinGuard(astNode** guard, astNode* cond)
 }
 
 // Make the loop node, guards go into the body as one if
-int buildFor(ForParts* parts, astNode** out)
+static int buildFor(ForParts* parts, astNode** out)
 {
     // Body runs only when all guards are true
     if (parts->guard != NULL)
@@ -959,7 +964,7 @@ int buildFor(ForParts* parts, astNode** out)
 }
 
 // Free every part the loop node did not take
-void forPartsFree(ForParts* parts)
+static void forPartsFree(ForParts* parts)
 {
     free(parts->name);
     astDestroy(parts->from);
@@ -970,7 +975,7 @@ void forPartsFree(ForParts* parts)
 }
 
 // Body of if, else or while: indented block or one statement on the same line
-int parseBranch(parcerContext* ctx, astNode** out)
+static int parseBranch(parcerContext* ctx, astNode** out)
 {
     // New line opens an indented block
     if (ctx->currentToken.type == TYPE_EOL)
@@ -982,7 +987,7 @@ int parseBranch(parcerContext* ctx, astNode** out)
 }
 
 // One statement on the same line becomes a block with only that statement
-int parseOneLineBranch(parcerContext* ctx, astNode** out)
+static int parseOneLineBranch(parcerContext* ctx, astNode** out)
 {
     // Definition alone in a branch is not allowed
     if (ctx->currentToken.type == TYPE_VAL ||
@@ -1000,7 +1005,7 @@ int parseOneLineBranch(parcerContext* ctx, astNode** out)
 }
 
 // Skip the new line only if else follows it on the next line
-int skipNewLineBeforeElse(parcerContext* ctx)
+static int skipNewLineBeforeElse(parcerContext* ctx)
 {
     if (ctx->currentToken.type != TYPE_EOL) return ERROR_SUCCESS;
     CHECK_ERR(peek(ctx));
@@ -1039,8 +1044,8 @@ int parseIfExpression(parcerContext* ctx, astNode** out)
 }
 
 // Condition, then branch and the required else branch of an if value
-int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
-                           astNode** thenBlock, astNode** elseBlock)
+static int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
+                                  astNode** thenBlock, astNode** elseBlock)
 {
     CHECK_ERR(parseExpression(ctx, cond));
     CHECK_ERR(match(ctx, TYPE_THEN));
@@ -1068,7 +1073,7 @@ int parseIfExpressionParts(parcerContext* ctx, astNode** cond,
 }
 
 // Branch of an if value: indented block or one value on the same line
-int parseValueBranch(parcerContext* ctx, astNode** out)
+static int parseValueBranch(parcerContext* ctx, astNode** out)
 {
     if (ctx->currentToken.type == TYPE_EOL)
     {
@@ -1081,7 +1086,7 @@ int parseValueBranch(parcerContext* ctx, astNode** out)
 }
 
 // End of statement: new line, ; or end of block or file
-int parseStatementEnd(parcerContext* ctx)
+static int parseStatementEnd(parcerContext* ctx)
 {
     // ; separates statements, a new line may follow it
     if (ctx->currentToken.type == TYPE_SEMICOLON)
@@ -1152,7 +1157,7 @@ int appendChild(astNode* parent, astNode* child)
 }
 
 // Comma before ) is allowed only if ) is on a later line
-int checkTrailingComma(parcerContext* ctx, int commaLine)
+static int checkTrailingComma(parcerContext* ctx, int commaLine)
 {
     if (ctx->currentToken.line == commaLine)
     {
@@ -1171,7 +1176,7 @@ int checkTrailingComma(parcerContext* ctx, int commaLine)
 
 // Data type: Int, Double, String, Unit or Boolean, type may be NULL if not
 // needed
-int matchDataType(parcerContext* ctx, dataType* type)
+static int matchDataType(parcerContext* ctx, dataType* type)
 {
     // Type word of the language to the type of the tree
     dataType found;
@@ -1206,7 +1211,7 @@ int matchDataType(parcerContext* ctx, dataType* type)
 // ============================================================
 
 // Type after a colon, a simple type keeps no description
-int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc)
+static int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc)
 {
     CHECK_ERR(parseTypeDesc(ctx, kind, desc));
 
@@ -1220,7 +1225,7 @@ int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc)
 }
 
 // Any type with a full description, desc is written only on success
-int parseTypeDesc(parcerContext* ctx, dataType* kind, typeDesc** desc)
+static int parseTypeDesc(parcerContext* ctx, dataType* kind, typeDesc** desc)
 {
     if (ctx->currentToken.type == TYPE_LIST)
         return parseListType(ctx, kind, desc);
@@ -1234,7 +1239,7 @@ int parseTypeDesc(parcerContext* ctx, dataType* kind, typeDesc** desc)
 }
 
 // List type: List, [, type of items, ]
-int parseListType(parcerContext* ctx, dataType* kind, typeDesc** desc)
+static int parseListType(parcerContext* ctx, dataType* kind, typeDesc** desc)
 {
     CHECK_ERR(advance(ctx));
     CHECK_ERR(match(ctx, TYPE_LEFT_BRACKET));
@@ -1258,7 +1263,7 @@ int parseListType(parcerContext* ctx, dataType* kind, typeDesc** desc)
 }
 
 // Function type: (, parameter types, ), =>, return type
-int parseFuncType(parcerContext* ctx, dataType* kind, typeDesc** desc)
+static int parseFuncType(parcerContext* ctx, dataType* kind, typeDesc** desc)
 {
     CHECK_ERR(advance(ctx));
 
@@ -1287,7 +1292,7 @@ int parseFuncType(parcerContext* ctx, dataType* kind, typeDesc** desc)
 }
 
 // Types separated by commas, empty list if ) comes at once
-int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count)
+static int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count)
 {
     if (ctx->currentToken.type == TYPE_RIGHT_PAREN) return ERROR_SUCCESS;
 
@@ -1313,14 +1318,14 @@ int parseTypeList(parcerContext* ctx, typeDesc*** list, int* count)
 }
 
 // Free every type in the array and the array
-void typeListFree(typeDesc** list, int count)
+static void typeListFree(typeDesc** list, int count)
 {
     for (int i = 0; i < count; i++) typeDescDestroy(list[i]);
     free(list);
 }
 
 // Take the name string from the token and move on, the caller frees it
-int takeName(parcerContext* ctx, char** name)
+static int takeName(parcerContext* ctx, char** name)
 {
     if (ctx->currentToken.type != TYPE_IDENTIFIER)
     {
@@ -1410,7 +1415,7 @@ int peek(parcerContext* ctx)
 }
 
 // Free the string that the token owns
-void freeTokenValue(Token* token)
+static void freeTokenValue(Token* token)
 {
     // Names, strings and text parts of interpolated strings own memory
     if (token->type == TYPE_IDENTIFIER || token->type == TYPE_STRING_LITERAL ||
