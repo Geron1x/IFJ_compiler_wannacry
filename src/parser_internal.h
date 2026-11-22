@@ -70,6 +70,17 @@ int peek(parcerContext* ctx);
 int match(parcerContext* ctx, Type expectedType);
 
 /**
+ * @brief Tells whether the current token is a name with exactly this text.
+ *
+ * Words like to, until, by and ifj26 come from the scanner as plain names.
+ *
+ * @param ctx Parser state.
+ * @param word Text the name must have.
+ * @return true if the current token is that name.
+ */
+bool isWord(const parcerContext* ctx, const char* word);
+
+/**
  * @brief Parses a value that may also be an if with else.
  *
  * @param ctx Parser state, current token starts the value.

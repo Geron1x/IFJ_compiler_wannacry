@@ -204,16 +204,12 @@ static int parsePrologue(parcerContext* ctx)
     CHECK_ERR(match(ctx, TYPE_IMPORT));
 
     // Only the name ifj26 is allowed
-    if (ctx->currentToken.type == TYPE_IDENTIFIER &&
-        strcmp(ctx->currentToken.value.identifier, "ifj26") == 0)
-    {
-        CHECK_ERR(advance(ctx));
-    }
-    else
+    if (!isWord(ctx, "ifj26"))
     {
         fprintf(stderr, "Syntax err: the idintifier needed 'ifj26'\n");
         return ERROR_SYNTAX;
     }
+    CHECK_ERR(advance(ctx));
 
     CHECK_ERR(match(ctx, TYPE_DOT));
     CHECK_ERR(match(ctx, TYPE_MUL));
@@ -862,20 +858,14 @@ static int parseForSource(parcerContext* ctx, ForParts* parts)
     CHECK_ERR(parseExpression(ctx, &parts->from));
 
     // Without to or until the source is a list
-    if (ctx->currentToken.type != TYPE_IDENTIFIER ||
-        (strcmp(ctx->currentToken.value.identifier, "to") != 0 &&
-         strcmp(ctx->currentToken.value.identifier, "until") != 0))
-    {
-        return ERROR_SUCCESS;
-    }
+    if (!isRangeStart(ctx)) return ERROR_SUCCESS;
     parts->isRange = true;
-    parts->isInclusive = strcmp(ctx->currentToken.value.identifier, "to") == 0;
+    parts->isInclusive = isWord(ctx, "to");
     CHECK_ERR(advance(ctx));
     CHECK_ERR(parseExpression(ctx, &parts->end));
 
     // Step is written after by
-    if (ctx->currentToken.type == TYPE_IDENTIFIER &&
-        strcmp(ctx->currentToken.value.identifier, "by") == 0)
+    if (isWord(ctx, "by"))
     {
         CHECK_ERR(advance(ctx));
         CHECK_ERR(parseExpression(ctx, &parts->step));
@@ -1334,6 +1324,13 @@ int match(parcerContext* ctx, Type expectedType)
                 ctx->currentToken.line);
         return ERROR_SYNTAX;
     }
+}
+
+// True if the current token is a name with exactly this text
+bool isWord(const parcerContext* ctx, const char* word)
+{
+    return ctx->currentToken.type == TYPE_IDENTIFIER &&
+           strcmp(ctx->currentToken.value.identifier, word) == 0;
 }
 
 // Move to the next token
