@@ -137,8 +137,6 @@ int parse(astNode** out)
         return err;
     }
 
-    // Message for testing only
-    fprintf(stderr, "Syntax analysis finished succesfully (code 0).\n");
 
     // Print the tree only in a build with -DAST_DEBUG
 #ifdef AST_DEBUG
