@@ -775,11 +775,7 @@ int parseExpression(parcerContext* ctx, astNode** out)
     for (size_t i = 0; i < stack.count; i++) astDestroy(stack.items[i].node);
     free(stack.items);
 
-    // Caller without a place for the tree does not need it
-    if (out == NULL)
-        astDestroy(result);
-    else
-        *out = result;
+    *out = result;
     return err;
 }
 
