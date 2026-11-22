@@ -1185,18 +1185,16 @@ static int matchDataType(parcerContext* ctx, dataType* type)
 // Types
 // ============================================================
 
-// Type after a colon, a simple type keeps no description
+// Type after a colon, only a list or a function type gets a description
 static int parseType(parcerContext* ctx, dataType* kind, typeDesc** desc)
 {
-    CHECK_ERR(parseTypeDesc(ctx, kind, desc));
-
-    // Simple type is fully told by its kind
-    if (*kind != S_TYPE_LIST && *kind != S_TYPE_FUNC)
+    // Simple type is fully told by its kind, no description is made
+    if (ctx->currentToken.type != TYPE_LIST &&
+        ctx->currentToken.type != TYPE_LEFT_PAREN)
     {
-        typeDescDestroy(*desc);
-        *desc = NULL;
+        return matchDataType(ctx, kind);
     }
-    return ERROR_SUCCESS;
+    return parseTypeDesc(ctx, kind, desc);
 }
 
 // Any type with a full description, desc is written only on success
