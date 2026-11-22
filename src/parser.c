@@ -37,6 +37,7 @@ typedef struct
 } ForParts;
 
 // Work with tokens
+static int readToken(parcerContext* ctx, Token* token);
 static void freeTokenValue(Token* token);
 static int matchDataType(parcerContext* ctx, dataType* type);
 static int takeName(parcerContext* ctx, char** name);
@@ -1333,6 +1334,16 @@ bool isWord(const parcerContext* ctx, const char* word)
            strcmp(ctx->currentToken.value.identifier, word) == 0;
 }
 
+// Read one token from the scanner, a lexical error also gets a message
+static int readToken(parcerContext* ctx, Token* token)
+{
+    int err = getToken(token, ctx->globalScanner);
+    // Return scanner code as is: 1 lexical, 99 memory
+    if (err == ERROR_LEXICAL)
+        fprintf(stderr, "Lexical err (line %d)\n", token->line);
+    return err;
+}
+
 // Move to the next token
 int advance(parcerContext* ctx)
 {
@@ -1354,15 +1365,7 @@ int advance(parcerContext* ctx)
     }
 
     // Otherwise ask the scanner
-    int err = getToken(&(ctx->currentToken), ctx->globalScanner);
-    if (err != ERROR_SUCCESS)
-    {
-        // Return scanner code as is: 1 lexical, 99 memory
-        if (err == ERROR_LEXICAL)
-            fprintf(stderr, "Lexical err (line %d)\n", ctx->currentToken.line);
-        return err;
-    }
-    return ERROR_SUCCESS;
+    return readToken(ctx, &ctx->currentToken);
 }
 
 // Look at the next token without moving, result is in ctx->peekToken
@@ -1372,14 +1375,7 @@ int peek(parcerContext* ctx)
     if (ctx->hasPeek) return ERROR_SUCCESS;
 
     ctx->peekToken.type = TYPE_ERROR;
-    int err = getToken(&ctx->peekToken, ctx->globalScanner);
-    if (err != ERROR_SUCCESS)
-    {
-        // Return scanner code as is: 1 lexical, 99 memory
-        if (err == ERROR_LEXICAL)
-            fprintf(stderr, "Lexical err (line %d)\n", ctx->peekToken.line);
-        return err;
-    }
+    CHECK_ERR(readToken(ctx, &ctx->peekToken));
     ctx->hasPeek = true;
     return ERROR_SUCCESS;
 }
