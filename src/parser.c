@@ -90,7 +90,6 @@ static int parseForHeader(parcerContext* ctx, ForParts* parts);
 static int parseForSource(parcerContext* ctx, ForParts* parts);
 static int parseForGuards(parcerContext* ctx, bool isMultiLine,
                           astNode** guard);
-static int joinGuard(astNode** guard, astNode* cond);
 static int buildFor(ForParts* parts, astNode** out);
 static void forPartsFree(ForParts* parts);
 static int parseBranch(parcerContext* ctx, astNode** out);
@@ -503,6 +502,27 @@ static int wrapInBlock(astNode* node, astNode** out)
     return ERROR_SUCCESS;
 }
 
+// Join a new part to the result so far with an operator
+// The part is freed on failure, the result stays with the caller
+int joinBinary(astNode** result, astOpType op, astNode* part)
+{
+    // First part becomes the whole result
+    if (*result == NULL)
+    {
+        *result = part;
+        return ERROR_SUCCESS;
+    }
+    astNode* joined = NULL;
+    int err = astCreateBinary(op, *result, part, &joined);
+    if (err != ERROR_SUCCESS)
+    {
+        astDestroy(part);
+        return err;
+    }
+    *result = joined;
+    return ERROR_SUCCESS;
+}
+
 // ============================================================
 // Statements
 // ============================================================
@@ -880,28 +900,8 @@ static int parseForGuards(parcerContext* ctx, bool isMultiLine, astNode** guard)
 
         astNode* cond = NULL;
         CHECK_ERR(parseExpression(ctx, &cond));
-        CHECK_ERR(joinGuard(guard, cond));
+        CHECK_ERR(joinBinary(guard, AST_OP_AND, cond));
     }
-}
-
-// Join a new condition to the guards so far with and
-// The condition is freed on failure, the guard stays with the caller
-static int joinGuard(astNode** guard, astNode* cond)
-{
-    if (*guard == NULL)
-    {
-        *guard = cond;
-        return ERROR_SUCCESS;
-    }
-    astNode* both = NULL;
-    int err = astCreateBinary(AST_OP_AND, *guard, cond, &both);
-    if (err != ERROR_SUCCESS)
-    {
-        astDestroy(cond);
-        return err;
-    }
-    *guard = both;
-    return ERROR_SUCCESS;
 }
 
 // Make the loop node, guards go into the body as one if

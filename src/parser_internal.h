@@ -115,4 +115,17 @@ int parseCallArgs(parcerContext* ctx, astNode* call);
  */
 int appendChild(astNode* parent, astNode* child);
 
+/**
+ * @brief Joins a new part to the result so far with a binary operator.
+ *
+ * The first part becomes the whole result. Joins guards of a for loop with &&
+ * and parts of an interpolated string with +.
+ *
+ * @param result Result so far, NULL before the first part.
+ * @param op Operator that joins the parts.
+ * @param part New part, owned by the result on success, freed on failure.
+ * @return ERROR_SUCCESS or ERROR_INTERNAL.
+ */
+int joinBinary(astNode** result, astOpType op, astNode* part);
+
 #endif
