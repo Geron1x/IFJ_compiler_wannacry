@@ -1315,16 +1315,12 @@ static int takeName(parcerContext* ctx, char** name)
 // Check that the token has the expected type and move on
 int match(parcerContext* ctx, Type expectedType)
 {
-    if (ctx->currentToken.type == expectedType)
-    {
-        return advance(ctx);
-    }
-    else
-    {
-        fprintf(stderr, "Syntax err in line  %d: unpredicted token\n",
-                ctx->currentToken.line);
-        return ERROR_SYNTAX;
-    }
+    if (ctx->currentToken.type == expectedType) return advance(ctx);
+
+    // Any other token is a syntax error
+    fprintf(stderr, "Syntax err in line  %d: unpredicted token\n",
+            ctx->currentToken.line);
+    return ERROR_SYNTAX;
 }
 
 // True if the current token is a name with exactly this text
