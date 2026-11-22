@@ -32,4 +32,12 @@ int parseExpression(parcerContext* ctx, astNode** out);
  */
 bool canStartExpression(Type type);
 
+/**
+ * @brief Tells whether the current token is to or until, the start of a range.
+ *
+ * @param ctx Parser state.
+ * @return true if a range starts here.
+ */
+bool isRangeStart(const parcerContext* ctx);
+
 #endif

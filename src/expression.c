@@ -282,19 +282,10 @@ static int precReduce(PrecStack* stack, int line)
     return err;
 }
 
-// True if the name is a word of a for range: to, until or by
-static bool isRangeWord(const char* name)
-{
-    return strcmp(name, "to") == 0 || strcmp(name, "until") == 0 ||
-           strcmp(name, "by") == 0;
-}
-
 // True if the current token is to or until, the start of a range
-static bool isRangeStart(const parcerContext* ctx)
+bool isRangeStart(const parcerContext* ctx)
 {
-    return ctx->currentToken.type == TYPE_IDENTIFIER &&
-           (strcmp(ctx->currentToken.value.identifier, "to") == 0 ||
-            strcmp(ctx->currentToken.value.identifier, "until") == 0);
+    return isWord(ctx, "to") || isWord(ctx, "until");
 }
 
 // Find the group of the current token, for ( the caller must peek first
@@ -347,8 +338,7 @@ static PrecSymbol precClassify(parcerContext* ctx, int depth,
             return (depth > 0) ? PS_RPAREN : PS_END;
         // Words to, until and by after a value end it, they start a range
         case TYPE_IDENTIFIER:
-            return (!expectOperand &&
-                    isRangeWord(ctx->currentToken.value.identifier))
+            return (!expectOperand && (isRangeStart(ctx) || isWord(ctx, "by")))
                        ? PS_END
                        : PS_OPERAND;
         // Literals, including true and false
@@ -618,15 +608,14 @@ static int precConsumeOperand(parcerContext* ctx, astNode** out)
 static int precParseRange(parcerContext* ctx, astNode** node)
 {
     // Word to keeps the last number, until leaves it out
-    bool isInclusive = strcmp(ctx->currentToken.value.identifier, "to") == 0;
+    bool isInclusive = isWord(ctx, "to");
     CHECK_ERR(advance(ctx));
 
     // End of the range, then maybe a step after by
     astNode* end = NULL;
     astNode* step = NULL;
     int err = parseExpression(ctx, &end);
-    if (err == ERROR_SUCCESS && ctx->currentToken.type == TYPE_IDENTIFIER &&
-        strcmp(ctx->currentToken.value.identifier, "by") == 0)
+    if (err == ERROR_SUCCESS && isWord(ctx, "by"))
     {
         err = advance(ctx);
         if (err == ERROR_SUCCESS) err = parseExpression(ctx, &step);
