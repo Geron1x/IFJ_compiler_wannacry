@@ -1152,35 +1152,32 @@ static int checkTrailingComma(parcerContext* ctx, int commaLine)
 // Work with tokens
 // ============================================================
 
-// Data type: Int, Double, String, Unit or Boolean, type may be NULL if not
-// needed
+// Simple data type: Int, Double, String, Unit or Boolean
 static int matchDataType(parcerContext* ctx, dataType* type)
 {
     // Type word of the language to the type of the tree
-    dataType found;
     switch (ctx->currentToken.type)
     {
         case TYPE_INT:
-            found = S_TYPE_INT;
+            *type = S_TYPE_INT;
             break;
         case TYPE_DOUBLE:
-            found = S_TYPE_DOUBLE;
+            *type = S_TYPE_DOUBLE;
             break;
         case TYPE_STRING:
-            found = S_TYPE_STRING;
+            *type = S_TYPE_STRING;
             break;
         case TYPE_UNIT:
-            found = S_TYPE_UNIT;
+            *type = S_TYPE_UNIT;
             break;
         case TYPE_BOOLEAN:
-            found = S_TYPE_BOOL;
+            *type = S_TYPE_BOOL;
             break;
         default:
             fprintf(stderr, "Syntax error in line %d: expected data type\n",
                     ctx->currentToken.line);
             return ERROR_SYNTAX;
     }
-    if (type != NULL) *type = found;
     return advance(ctx);
 }
 

@@ -19,8 +19,7 @@
  * Stops at the first token that cannot continue the expression.
  *
  * @param ctx Parser state, current token is the first token of the expression.
- * @param out Receives the expression tree, NULL on error. If out is NULL the
- *            tree is freed right away.
+ * @param out Receives the expression tree, NULL on error.
  * @return ERROR_SUCCESS, ERROR_LEXICAL, ERROR_SYNTAX or ERROR_INTERNAL.
  */
 int parseExpression(parcerContext* ctx, astNode** out);
