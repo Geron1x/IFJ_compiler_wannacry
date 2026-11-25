@@ -248,6 +248,12 @@ static const char* getJumpLabelText(jumpLabelType type)
         case LABEL_FOR_BODY:
             return "for$body";
 
+        case LABEL_LAMBDA_START:
+            return "lambda$start";
+
+        case LABEL_LAMBDA_END:
+            return "lambda$end";
+
         default:  // not in the list
             return NULL;
     }

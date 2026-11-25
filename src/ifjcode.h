@@ -31,4 +31,13 @@ int generateIfjcode(const astNode* program);
  */
 int generateIf(const astNode* ifNode, codegenContext* context);
 
+/**
+ * @brief Prints the lambda and pushes its label as a string
+ *
+ * @param lambda
+ * @param context
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int generateLambda(const astNode* lambda, codegenContext* context);
+
 #endif

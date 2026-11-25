@@ -52,7 +52,11 @@ typedef enum
     LABEL_FOR_END,     /**< After the loop, false check jumps here */
     LABEL_FOR_STEP_OK, /**< Step is not zero, loop can start */
     LABEL_FOR_DOWN,    /**< Step is negative, we check going down */
-    LABEL_FOR_BODY     /**< Check passed, body starts here */
+    LABEL_FOR_BODY,    /**< Check passed, body starts here */
+
+    /* Lambdas */
+    LABEL_LAMBDA_START, /**< Start of the lambda, CALL jumps here */
+    LABEL_LAMBDA_END    /**< End of the lambda, outer code goes on here */
 } jumpLabelType;
 
 /**

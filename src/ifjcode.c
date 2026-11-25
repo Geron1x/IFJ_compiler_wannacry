@@ -73,12 +73,37 @@ static int defineTempVar(size_t number)
     return writeTempInstruction("DEFVAR", number);
 }
 
+/** Gives what the function returns */
+static dataType getReturnType(const astNode* function)
+{
+    // normal function keeps it right in the node
+    if (function->nodeType != AST_EXPR_LAMBDA)
+    {
+        return function->retType;
+    }
+
+    // for a lambda the real type is inside typeInfo
+    const typeDesc* returnDesc = NULL;
+    if (function->typeInfo != NULL)
+    {
+        returnDesc = function->typeInfo->func.returnType;
+    }
+
+    // nothing written means Unit
+    if (returnDesc == NULL)
+    {
+        return S_TYPE_UNIT;
+    }
+
+    return returnDesc->type;
+}
+
 /** Prints the way out of the function */
 static int writeFunctionExit(const codegenContext* context)
 {
     // look if the func - returns Unit
     bool isFunctionUnit;
-    isFunctionUnit = (context->currentFunction->retType == S_TYPE_UNIT);
+    isFunctionUnit = (getReturnType(context->currentFunction) == S_TYPE_UNIT);
 
     // Unit func gives ()
     if (isFunctionUnit == true)
@@ -115,6 +140,8 @@ static bool givesValue(const astNode* node)
         case AST_EXPR_VAR:
         case AST_EXPR_LITERAL:
         case AST_EXPR_IF:
+        case AST_EXPR_LAMBDA:
+        case AST_EXPR_CALL_EXPR:
         // if gives a value even without else
         case AST_STAT_IF:
             return true;
@@ -366,6 +393,8 @@ static int generateCommand(const astNode* command, codegenContext* context)
         case AST_EXPR_VAR:
         case AST_EXPR_LITERAL:
         case AST_EXPR_IF:
+        case AST_EXPR_LAMBDA:
+        case AST_EXPR_CALL_EXPR:
             // just put the value on the stack
             return pushExpression(command, context);
 
@@ -470,7 +499,15 @@ static int defineVariables(const astNode* node)
     size_t childCount = (size_t)node->childCount;
     for (size_t i = 0; i < childCount; i++)
     {
-        RETURN_IF_ERROR(defineVariables(node->children[i]));
+        const astNode* child = node->children[i];
+
+        // lambda has its own frame, it defines its variables by itself
+        if (child->nodeType == AST_EXPR_LAMBDA)
+        {
+            continue;
+        }
+
+        RETURN_IF_ERROR(defineVariables(child));
     }
 
     return ERROR_SUCCESS;
@@ -495,21 +532,13 @@ static int popParams(const astNode* function)
     return ERROR_SUCCESS;
 }
 
-/** Prints function */
-static int generateFunction(const astNode* function, codegenContext* context)
+/** Prints everything after the label */
+static int generateFunctionBody(const astNode* function,
+                                codegenContext* context)
 {
-    // Program should have only functions here
-    if (function->nodeType != AST_FUNC)
-    {
-        return ERROR_INTERNAL;
-    }
-
     // which func we are in rn
     context->currentFunction = function;
 
-    RETURN_IF_ERROR(tryPrint("\nLABEL "));
-    RETURN_IF_ERROR(writeFuncLabel(function->data.funcData.key));
-    RETURN_IF_ERROR(tryPrint("\n"));
     RETURN_IF_ERROR(tryPrint("CREATEFRAME\n"));
     RETURN_IF_ERROR(tryPrint("PUSHFRAME\n"));
 
@@ -526,9 +555,57 @@ static int generateFunction(const astNode* function, codegenContext* context)
     // print all commands of the function
     RETURN_IF_ERROR(generateBlock(getFunctionBody(function), context));
 
-    RETURN_IF_ERROR(writeFunctionExit(context));
+    return writeFunctionExit(context);
+}
 
-    return ERROR_SUCCESS;
+/** Prints the lambda */
+int generateLambda(const astNode* lambda, codegenContext* context)
+{
+    size_t labelNumber = takeLabelNumber(context);
+
+    // remember where we are, the lambda body changes it
+    const astNode* outerFunction = context->currentFunction;
+
+    // jump over the lambda, it runs only when someone calls it
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_LAMBDA_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // CALL lands here
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_LAMBDA_START, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    RETURN_IF_ERROR(generateFunctionBody(lambda, context));
+
+    // back to the outer function
+    context->currentFunction = outerFunction;
+
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_LAMBDA_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // value of the lambda is the name of its label
+    RETURN_IF_ERROR(tryPrint("PUSHS string@"));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_LAMBDA_START, labelNumber));
+
+    return tryPrint("\n");
+}
+
+/** Prints function */
+static int generateFunction(const astNode* function, codegenContext* context)
+{
+    // Program should have only functions here
+    if (function->nodeType != AST_FUNC)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    RETURN_IF_ERROR(tryPrint("\nLABEL "));
+    RETURN_IF_ERROR(writeFuncLabel(function->data.funcData.key));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return generateFunctionBody(function, context);
 }
 
 /** Prints IFJcode26 */
