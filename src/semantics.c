@@ -336,6 +336,7 @@ static int checkFunctionBody(astNode* funcNode, symtable* globalTable)
     }
     else if (declaredType != actualBodyType)
     {
+        /** int2float conversion in primitive return types */
         if (actualBodyType == S_TYPE_INT && declaredType == S_TYPE_DOUBLE)
         {
             astNode* last = funcNode->children[0];
@@ -893,9 +894,7 @@ static int checkSet(astNode* setNode, symtable* globalTable,
     }
     else if (varDesc != NULL)
     {
-        if (expr->typeInfo == NULL ||
-            (!typeDescEquals(varDesc, expr->typeInfo) &&
-             !adaptComplexDesc(varDesc, expr)))
+        if (expr->typeInfo == NULL || !adaptComplexDesc(varDesc, expr))
         {
             return ERROR_TYPE_MISMATCH;
         }
@@ -1161,8 +1160,7 @@ static int checkReturn(astNode* returnNode, symtable* globalTable,
         {
 
             if (retExpr->typeInfo == NULL ||
-                (!typeDescEquals(expectedDesc, retExpr->typeInfo) &&
-                 !adaptComplexDesc(expectedDesc, retExpr)))
+                !adaptComplexDesc(expectedDesc, retExpr))
             {
                 return ERROR_TYPE_MISMATCH;
             }
@@ -1609,7 +1607,7 @@ static dataType checkLambdaExpr(astNode* lambdaNode, symtable* globalTable,
         }
     }
 
-    /** insert parameters of lambda function into symtable with (if present)
+    /** insert paramaters of lambda function into symtable with (if present)
      * descriptor types */
     for (int i = 1; i < paramCount + 1; i++)
     {
@@ -1820,7 +1818,7 @@ static int resolveFuncVarReference(astNode* exprNode,
     /** check types of parameters */
     for (int i = 0; i < paramCount; i++)
     {
-        dataType pType = symtableGetFuncParamType(globalTable, key, i);
+        dataType paramType = symtableGetFuncParamType(globalTable, key, i);
         const typeDesc* paramDesc =
             symtableGetFuncParamTypeDesc(globalTable, key, i);
         const typeDesc* expParam = expectedDesc->func.paramTypes[i];
@@ -1836,7 +1834,7 @@ static int resolveFuncVarReference(astNode* exprNode,
                 return ERROR_TYPE_MISMATCH;
             }
         }
-        else if (pType != expParam->type)
+        else if (paramType != expParam->type)
         {
             return ERROR_TYPE_MISMATCH;
         }
@@ -1879,6 +1877,7 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
     dataType localVarType = symtableGetVarType(globalTable, callerKey);
     if (localVarType != S_TYPE_UNKNOWN)
     {
+        callNode->data.funcData.id = symtableGetVarId(globalTable, callerKey);
         if (localVarType == S_TYPE_LIST)
         {
             if (callNode->childCount != 1)
@@ -1971,8 +1970,7 @@ static dataType checkCallExpr(astNode* callNode, symtable* globalTable,
                 }
                 else if ((expParam->type == S_TYPE_FUNC ||
                           expParam->type == S_TYPE_LIST) &&
-                         (!typeDescEquals(expParam, arg->typeInfo) &&
-                          !adaptComplexDesc(expParam, arg)))
+                         !adaptComplexDesc(expParam, arg))
                 {
                     *err = ERROR_WRONG_ARGUMENTS;
                     return S_TYPE_UNKNOWN;
@@ -2129,6 +2127,8 @@ static bool adaptComplexDesc(const typeDesc* expected, astNode* exprNode)
         exprNode->typeInfo->type == S_TYPE_FUNC &&
         expected->func.paramCount == exprNode->typeInfo->func.paramCount)
     {
+        /** check the parameter again to ensure no faulty conversion in case of
+         * appropriate return types but inappropriate parameters  */
         for (int i = 0; i < expected->func.paramCount; i++)
         {
             if (!typeDescEquals(expected->func.paramTypes[i],
@@ -2581,8 +2581,7 @@ static dataType checkCallExprNode(astNode* callExprNode, symtable* globalTable,
                 }
                 else if ((expParam->type == S_TYPE_FUNC ||
                           expParam->type == S_TYPE_LIST) &&
-                         (!typeDescEquals(expParam, arg->typeInfo) &&
-                          !adaptComplexDesc(expParam, arg)))
+                         !adaptComplexDesc(expParam, arg))
                 {
                     *err = ERROR_WRONG_ARGUMENTS;
                     return S_TYPE_UNKNOWN;

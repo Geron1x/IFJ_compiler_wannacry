@@ -63,6 +63,7 @@ struct astNode
 
         struct
         {
+            size_t id;
             char* key; /**< function name */
             bool isMain;
         } funcData;
