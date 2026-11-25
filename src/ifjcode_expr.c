@@ -10,6 +10,7 @@
 
 #include "ifjcode_expr.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 
 #include "ast_internal.h"
@@ -67,6 +68,16 @@ static int pushVariable(const astNode* variable)
     const char* name = variable->data.varData.key;
 
     size_t number = variable->data.varData.id;
+
+    // number 0 means this is a function, not a variable
+    bool isFunctionName = (number == 0);
+    if (isFunctionName == true)
+    {
+        // function value is just its label as a string
+        RETURN_IF_ERROR(tryPrint("PUSHS string@"));
+        RETURN_IF_ERROR(writeFuncLabel(name));
+        return tryPrint("\n");
+    }
 
     // put it on the stack
     return writeVarInstruction("PUSHS", name, number);
@@ -253,6 +264,33 @@ static int pushCall(const astNode* call, codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Calls the function that comes from an expression */
+static int pushCallExpr(const astNode* call, codegenContext* context)
+{
+    const astNode* function = call->children[0];
+
+    if (function->retType != S_TYPE_FUNC)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    // arguments go after the function
+    size_t childCount = (size_t)call->childCount;
+    for (size_t i = 1; i < childCount; i++)
+    {
+        RETURN_IF_ERROR(pushExpression(call->children[i], context));
+    }
+
+    // the function gives us its label, keep it in tmp1
+    RETURN_IF_ERROR(pushExpression(function, context));
+    RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
+
+    RETURN_IF_ERROR(tryPrint("CALL "));
+    RETURN_IF_ERROR(writeTempVar(1));
+
+    return tryPrint("\n");
+}
+
 /** Handles minus or plus before a number */
 static int pushUnary(const astNode* unary, codegenContext* context)
 {
@@ -316,6 +354,14 @@ int pushExpression(const astNode* expression, codegenContext* context)
 
         case AST_EXPR_IF:
             RETURN_IF_ERROR(generateIf(expression, context));
+            break;
+
+        case AST_EXPR_LAMBDA:
+            RETURN_IF_ERROR(generateLambda(expression, context));
+            break;
+
+        case AST_EXPR_CALL_EXPR:
+            RETURN_IF_ERROR(pushCallExpr(expression, context));
             break;
 
         default:
