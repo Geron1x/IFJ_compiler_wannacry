@@ -257,6 +257,14 @@ static int pushCall(const astNode* call, codegenContext* context)
         RETURN_IF_ERROR(pushExpression(call->children[i], context));
     }
 
+    // number above 0 means a variable that keeps a function
+    size_t number = call->data.funcData.id;
+    bool isVariableCall = (number > 0);
+    if (isVariableCall == true)
+    {
+        return writeVarInstruction("CALL", call->data.funcData.key, number);
+    }
+
     RETURN_IF_ERROR(tryPrint("CALL "));
     RETURN_IF_ERROR(writeFuncLabel(call->data.funcData.key));
     RETURN_IF_ERROR(tryPrint("\n"));
