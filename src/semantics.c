@@ -831,7 +831,8 @@ static dataType checkExpr(astNode* exprNode, symtable* globalTable,
         case AST_EXPR_MEMBER:
             return checkMemberExpr(exprNode, globalTable, currentNode, err);
         case AST_EXPR_RANGE:
-            return checkRangeExpr(exprNode, globalTable, currentNode, err);
+            *err = ERROR_TYPE_MISMATCH;
+            return S_TYPE_UNKNOWN;
         case AST_EXPR_CALL_EXPR:
             return checkCallExprNode(exprNode, globalTable, currentNode, err);
         default:
@@ -914,7 +915,13 @@ static int checkIf(astNode* ifNode, symtable* globalTable, astNode* currentNode,
 
     Errors status = 0;
 
-    if (isLastInExprBlock && ifNode->childCount > 2 &&
+    bool isExplicitUnitFunc =
+        (currentNode->nodeType == AST_FUNC &&
+         currentNode->data.funcData.key != NULL &&
+         symtableGetFuncReturn(globalTable, currentNode->data.funcData.key) ==
+             S_TYPE_UNIT);
+
+    if (!isExplicitUnitFunc && isLastInExprBlock && ifNode->childCount > 2 &&
         ifNode->children[2] != NULL)
     {
         checkIfExpr(ifNode, globalTable, currentNode, expectedRetDesc, &status);
@@ -1477,8 +1484,28 @@ static dataType checkBinaryExpr(astNode* biNode, symtable* globalTable,
         case AST_OP_EQ:
         case AST_OP_NEQ:
             if (typeLeft == S_TYPE_INT || typeLeft == S_TYPE_DOUBLE ||
-                typeLeft == S_TYPE_STRING || typeLeft == S_TYPE_BOOL)
+                typeLeft == S_TYPE_STRING || typeLeft == S_TYPE_BOOL ||
+                typeLeft == S_TYPE_UNIT)
             {
+                typeLeft = S_TYPE_BOOL;
+            }
+            else if (typeLeft == S_TYPE_LIST)
+            {
+                if (biNode->children[0]->typeInfo == NULL ||
+                    biNode->children[1]->typeInfo == NULL ||
+                    !typeDescEquals(biNode->children[0]->typeInfo,
+                                    biNode->children[1]->typeInfo))
+                {
+                    *err = ERROR_TYPE_MISMATCH;
+                    return S_TYPE_UNKNOWN;
+                }
+                typeDescDestroy(biNode->typeInfo);
+                biNode->typeInfo = typeDescClone(biNode->children[0]->typeInfo);
+                if (biNode->typeInfo == NULL)
+                {
+                    *err = ERROR_INTERNAL;
+                    return S_TYPE_UNKNOWN;
+                }
                 typeLeft = S_TYPE_BOOL;
             }
             else
