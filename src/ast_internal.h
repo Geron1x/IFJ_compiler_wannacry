@@ -47,8 +47,7 @@ struct astNode
     bool int2float;
     union
     {
-        int intVal; /**< value for literal node int !!CHANGE TO LONG LONG INT!!
-                     */
+        long long int intVal; /**< value for integer literal nodes */
         double doubleVal; /**< value for literal node double */
         char* strVal;     /**< value for literal node string */
         bool boolVal;     /**< value for literal node string */
@@ -71,7 +70,7 @@ struct astNode
         struct
         {
             size_t id;
-            int intVal;
+            long long int intVal;
             char* key;
             bool isInclusive;
             bool hasStep;

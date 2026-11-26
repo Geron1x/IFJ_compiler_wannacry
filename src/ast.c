@@ -234,7 +234,8 @@ int astCreateWhile(astNode* condition, astNode* body, astNode** retNode)
     return 0;
 }
 int astCreateFor(const char* key, astNode* from, astNode* end, astNode* step,
-                 bool isInclusive, astNode* body, int intVal, astNode** retNode)
+                 bool isInclusive, astNode* body, long long int intVal,
+                 astNode** retNode)
 {
     if (retNode == NULL || key == NULL || from == NULL || end == NULL ||
         body == NULL)
@@ -544,8 +545,7 @@ int astCreateVarExpr(const char* key, astNode** retNode)
     return 0;
 }
 
-int astCreateLiteralInt(int val,
-                        astNode** retNode) /** CHANGE TO LONG LONG INT */
+int astCreateLiteralInt(long long int val, astNode** retNode)
 {
     if (retNode == NULL)
     {

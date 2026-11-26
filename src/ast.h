@@ -181,7 +181,7 @@ int astCreateSetter(const char* key, astNode* expr, astNode** retNode);
  * @brief Creates a node to express a for loop block (AST_STAT_FOR)
  */
 int astCreateFor(const char* key, astNode* from, astNode* end, astNode* step,
-                 bool isInclusive, astNode* body, int intVal,
+                 bool isInclusive, astNode* body, long long int intVal,
                  astNode** retNode);
 
 
@@ -212,7 +212,7 @@ int astCreateIfExpr(astNode* condition, astNode* thenBlock, astNode* elseBlock,
 /**
  * @brief Creates a literal node with type Int (AST_EXPR_LITERAL)
  */
-int astCreateLiteralInt(int val, astNode** retNode);
+int astCreateLiteralInt(long long int val, astNode** retNode);
 /**
  * @brief Creates a literal node with type Double (AST_EXPR_LITERAL)
  */
