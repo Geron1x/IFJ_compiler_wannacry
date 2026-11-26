@@ -243,6 +243,12 @@ static int pushOperation(const astNode* binary, codegenContext* context)
         return writeConcat();
     }
 
+    // two lists become one
+    if (binary->data.opType == AST_OP_CONCAT)
+    {
+        return tryPrint("CALL $$list$concat\n");
+    }
+
     // print the operation text to stdout
     return tryPrint(translateOperator(binary->data.opType, binary->retType));
 }
@@ -385,11 +391,39 @@ static int writeListCall(const char* name)
     return tryPrint("\n");
 }
 
+/** Puts start, end, step and the end kind on stack and makes the list */
+static int pushRange(const astNode* start, const astNode* end,
+                     const astNode* step, bool isInclusive,
+                     codegenContext* context)
+{
+    // start and end of the numbers
+    RETURN_IF_ERROR(pushExpression(start, context));
+    RETURN_IF_ERROR(pushExpression(end, context));
+
+    // no step means we go by one
+    if (step != NULL)
+    {
+        RETURN_IF_ERROR(pushExpression(step, context));
+    }
+    else
+    {
+        RETURN_IF_ERROR(tryPrint("PUSHS int@1\n"));
+    }
+
+    // is the end inside or not
+    RETURN_IF_ERROR(tryPrint("PUSHS "));
+    RETURN_IF_ERROR(writeLiteralBool(isInclusive));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return writeListCall("range");
+}
+
 /** Tells if we already have a list function for this member */
 static bool isListMember(const char* name)
 {
-    const char* members[] = {"head", "tail",  "take",
-                             "drop", "slice", "toString"};
+    const char* members[] = {"head",   "tail",      "take",
+                             "drop",   "slice",     "toString",
+                             "filter", "takeWhile", "dropWhile"};
 
     // count how many names we have
     size_t memberCount = sizeof(members) / sizeof(members[0]);
@@ -413,6 +447,33 @@ static int pushMember(const astNode* member, codegenContext* context)
     const char* name = member->data.memberData.key;
     const astNode* receiver = member->children[0];
     size_t childCount = (size_t)member->childCount;
+
+    // List.range makes numbers, the end is not inside
+    bool isListRange = (receiver->nodeType == AST_EXPR_VAR &&
+                        strcmp(receiver->data.varData.key, "List") == 0);
+    if (isListRange == true)
+    {
+        const astNode* step = NULL;
+        if (childCount > 3)
+        {
+            step = member->children[3];
+        }
+        return pushRange(member->children[1], member->children[2], step, false,
+                         context);
+    }
+
+    // toList makes a list from to or until
+    bool isRangeToList = (receiver->nodeType == AST_EXPR_RANGE);
+    if (isRangeToList == true)
+    {
+        const astNode* step = NULL;
+        if (receiver->data.rangeData.hasStep == true)
+        {
+            step = receiver->children[2];
+        }
+        return pushRange(receiver->children[0], receiver->children[1], step,
+                         receiver->data.rangeData.isInclusive, context);
+    }
 
     if (isListMember(name) == false)
     {

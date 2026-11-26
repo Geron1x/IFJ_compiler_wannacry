@@ -384,6 +384,62 @@ static int generateFor(const astNode* forNode, codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Prints the for that goes through all items of the list */
+static int generateForEach(const astNode* forNode, codegenContext* context)
+{
+    const astNode* list = forNode->children[0];
+    const astNode* body = forNode->children[1];
+    const char* name = forNode->data.forData.key;
+    size_t number = forNode->data.forData.id;
+    size_t labelNumber = takeLabelNumber(context);
+
+    // count the list only once and keep it
+    RETURN_IF_ERROR(pushExpression(list, context));
+    RETURN_IF_ERROR(writeForPartInstruction("POPS", name, number, "?list"));
+
+    // we start from the first item
+    RETURN_IF_ERROR(tryPrint("PUSHS int@0\n"));
+    RETURN_IF_ERROR(writeForPartInstruction("POPS", name, number, "?index"));
+
+    // every round starts here
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_CHECK, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // stop when index is past the last item
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?index"));
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?list"));
+    RETURN_IF_ERROR(tryPrint("CALL $$list$length\n"));
+    RETURN_IF_ERROR(tryPrint("LTS\n"));
+    RETURN_IF_ERROR(writeJumpIfFalse(LABEL_FOR_END, labelNumber));
+
+    // take the item into the loop variable
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?index"));
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?list"));
+    RETURN_IF_ERROR(tryPrint("CALL $$list$get\n"));
+    RETURN_IF_ERROR(writeVarInstruction("POPS", name, number));
+
+    // do the body and clean stack after it
+    RETURN_IF_ERROR(generateBlock(body, context));
+    RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
+
+    // go to the next item
+    RETURN_IF_ERROR(writeForPartInstruction("PUSHS", name, number, "?index"));
+    RETURN_IF_ERROR(tryPrint("PUSHS int@1\nADDS\n"));
+    RETURN_IF_ERROR(writeForPartInstruction("POPS", name, number, "?index"));
+
+    // go back to check again
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_CHECK, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // end of the loop
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_FOR_END, labelNumber));
+
+    return tryPrint("\n");
+}
+
 /** Prints command from the block */
 static int generateCommand(const astNode* command, codegenContext* context)
 {
@@ -419,6 +475,9 @@ static int generateCommand(const astNode* command, codegenContext* context)
 
         case AST_STAT_FOR:
             return generateFor(command, context);
+
+        case AST_STAT_FOR_EACH:
+            return generateForEach(command, context);
 
         default:
             return ERROR_INTERNAL;
@@ -483,6 +542,22 @@ static int defineForVariables(const astNode* forNode)
     return ERROR_SUCCESS;
 }
 
+/** Defines all variables of the for over a list */
+static int defineForEachVariables(const astNode* forNode)
+{
+    const char* name = forNode->data.forData.key;
+    size_t number = forNode->data.forData.id;
+
+    // loop variable
+    RETURN_IF_ERROR(writeVarInstruction("DEFVAR", name, number));
+
+    // list and index are hidden and live here
+    RETURN_IF_ERROR(writeForPartInstruction("DEFVAR", name, number, "?list"));
+    RETURN_IF_ERROR(writeForPartInstruction("DEFVAR", name, number, "?index"));
+
+    return ERROR_SUCCESS;
+}
+
 /** Defines all variables of the function */
 static int defineVariables(const astNode* node)
 {
@@ -498,6 +573,12 @@ static int defineVariables(const astNode* node)
     if (node->nodeType == AST_STAT_FOR)
     {
         RETURN_IF_ERROR(defineForVariables(node));
+    }
+
+    // if node is for over a list - we define its three variables
+    if (node->nodeType == AST_STAT_FOR_EACH)
+    {
+        RETURN_IF_ERROR(defineForEachVariables(node));
     }
 
     // check every child
