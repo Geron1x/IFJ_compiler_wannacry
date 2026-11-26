@@ -144,6 +144,7 @@ static bool givesValue(const astNode* node)
         case AST_EXPR_LAMBDA:
         case AST_EXPR_CALL_EXPR:
         case AST_EXPR_LIST_LITERAL:
+        case AST_EXPR_MEMBER:
         // if gives a value even without else
         case AST_STAT_IF:
             return true;
@@ -398,6 +399,7 @@ static int generateCommand(const astNode* command, codegenContext* context)
         case AST_EXPR_LAMBDA:
         case AST_EXPR_CALL_EXPR:
         case AST_EXPR_LIST_LITERAL:
+        case AST_EXPR_MEMBER:
             // just put the value on the stack
             return pushExpression(command, context);
 
