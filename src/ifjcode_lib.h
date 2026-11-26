@@ -12,6 +12,21 @@
 #define IFJCODE_LIB_H
 
 /**
+ * @brief Prints the start of a built-in function
+ *
+ * @param name
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeLibraryStart(const char* name);
+
+/**
+ * @brief Prints the end of a built-in function
+ *
+ * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL
+ */
+int writeLibraryEnd(void);
+
+/**
  * @brief Prints all built-in functions
  *
  * @return ERROR_SUCCESS if everything worked, otherwise ERROR_INTERNAL

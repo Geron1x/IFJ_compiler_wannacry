@@ -56,7 +56,11 @@ typedef enum
 
     /* Lambdas */
     LABEL_LAMBDA_START, /**< Start of the lambda, CALL jumps here */
-    LABEL_LAMBDA_END    /**< End of the lambda, outer code goes on here */
+    LABEL_LAMBDA_END,   /**< End of the lambda, outer code goes on here */
+
+    /* Lists */
+    LABEL_CALL_LIST, /**< Variable keeps a list, we take the item */
+    LABEL_CALL_END   /**< After the call, both ways meet here */
 } jumpLabelType;
 
 /**

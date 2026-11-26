@@ -246,6 +246,50 @@ static int pushOperation(const astNode* binary, codegenContext* context)
     return tryPrint(translateOperator(binary->data.opType, binary->retType));
 }
 
+/** Variable keeps a list or a function, we look which one and use it */
+static int pushVariableCall(const astNode* call, codegenContext* context)
+{
+    // name and number of the variable
+    const char* name = call->data.funcData.key;
+    size_t number = call->data.funcData.id;
+    size_t labelNumber = takeLabelNumber(context);
+
+    // look what type the variable has
+    RETURN_IF_ERROR(tryPrint("TYPE "));
+    RETURN_IF_ERROR(writeTempVar(1));
+    RETURN_IF_ERROR(tryPrint(" "));
+    RETURN_IF_ERROR(writeVarName(name, number));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // array means list, jump there
+    RETURN_IF_ERROR(tryPrint("JUMPIFEQ "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_CALL_LIST, labelNumber));
+    RETURN_IF_ERROR(tryPrint(" "));
+    RETURN_IF_ERROR(writeTempVar(1));
+    RETURN_IF_ERROR(tryPrint(" string@array\n"));
+
+    // function part
+    RETURN_IF_ERROR(writeVarInstruction("CALL", name, number));
+    RETURN_IF_ERROR(tryPrint("JUMP "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_CALL_END, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // list part, take the item on the index
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_CALL_LIST, labelNumber));
+    RETURN_IF_ERROR(tryPrint("\n"));
+    RETURN_IF_ERROR(writeVarInstruction("PUSHS", name, number));
+    RETURN_IF_ERROR(tryPrint("CALL "));
+    RETURN_IF_ERROR(writeFuncLabel("list$get"));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    // end
+    RETURN_IF_ERROR(tryPrint("LABEL "));
+    RETURN_IF_ERROR(writeJumpLabel(LABEL_CALL_END, labelNumber));
+
+    return tryPrint("\n");
+}
+
 /** Pushes all arguments and calls the function */
 static int pushCall(const astNode* call, codegenContext* context)
 {
@@ -262,7 +306,7 @@ static int pushCall(const astNode* call, codegenContext* context)
     bool isVariableCall = (number > 0);
     if (isVariableCall == true)
     {
-        return writeVarInstruction("CALL", call->data.funcData.key, number);
+        return pushVariableCall(call, context);
     }
 
     RETURN_IF_ERROR(tryPrint("CALL "));
@@ -276,8 +320,10 @@ static int pushCall(const astNode* call, codegenContext* context)
 static int pushCallExpr(const astNode* call, codegenContext* context)
 {
     const astNode* function = call->children[0];
+    bool isList = (function->retType == S_TYPE_LIST);
+    bool isFunction = (function->retType == S_TYPE_FUNC);
 
-    if (function->retType != S_TYPE_FUNC)
+    if (isList == false && isFunction == false)
     {
         return ERROR_INTERNAL;
     }
@@ -289,14 +335,44 @@ static int pushCallExpr(const astNode* call, codegenContext* context)
         RETURN_IF_ERROR(pushExpression(call->children[i], context));
     }
 
-    // the function gives us its label, keep it in tmp1
     RETURN_IF_ERROR(pushExpression(function, context));
+
+    if (isList == true)
+    {
+        RETURN_IF_ERROR(tryPrint("CALL "));
+        RETURN_IF_ERROR(writeFuncLabel("list$get"));
+        return tryPrint("\n");
+    }
+
+    // the function gives us its label, keep it in tmp1
     RETURN_IF_ERROR(writeTempInstruction("POPS", 1));
 
     RETURN_IF_ERROR(tryPrint("CALL "));
     RETURN_IF_ERROR(writeTempVar(1));
 
     return tryPrint("\n");
+}
+
+/** Puts all items on the stack and makes a list from them */
+static int pushListLiteral(const astNode* list, codegenContext* context)
+{
+    size_t itemCount = (size_t)list->childCount;
+
+    // put every item on stack
+    for (size_t i = 0; i < itemCount; i++)
+    {
+        RETURN_IF_ERROR(pushExpression(list->children[i], context));
+    }
+
+    RETURN_IF_ERROR(tryPrint("PUSHS "));
+    RETURN_IF_ERROR(writeLiteralInt((long long)itemCount));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    RETURN_IF_ERROR(tryPrint("CALL "));
+    RETURN_IF_ERROR(writeFuncLabel("list$make"));
+    RETURN_IF_ERROR(tryPrint("\n"));
+
+    return ERROR_SUCCESS;
 }
 
 /** Handles minus or plus before a number */
@@ -370,6 +446,10 @@ int pushExpression(const astNode* expression, codegenContext* context)
 
         case AST_EXPR_CALL_EXPR:
             RETURN_IF_ERROR(pushCallExpr(expression, context));
+            break;
+
+        case AST_EXPR_LIST_LITERAL:
+            RETURN_IF_ERROR(pushListLiteral(expression, context));
             break;
 
         default:
