@@ -15,7 +15,7 @@
 #include "operands.h"
 
 /** Prints the start of a built-in function */
-static int writeLibraryStart(const char* name)
+int writeLibraryStart(const char* name)
 {
     RETURN_IF_ERROR(tryPrint("\nLABEL "));
     RETURN_IF_ERROR(writeFuncLabel(name));
@@ -27,7 +27,7 @@ static int writeLibraryStart(const char* name)
 }
 
 /** Prints the end of a built-in function */
-static int writeLibraryEnd(void)
+int writeLibraryEnd(void)
 {
     //  close the frame
     RETURN_IF_ERROR(tryPrint("POPFRAME\n"));
@@ -48,6 +48,17 @@ static int writeLibraryPrint(void)
 
     // if its () go to unit, else write it
     RETURN_IF_ERROR(tryPrint("JUMPIFEQ ?print$unit LF@value nil@nil\n"));
+
+    // list must become text before we write it
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@type\n"));
+    RETURN_IF_ERROR(tryPrint("TYPE LF@type LF@value\n"));
+    RETURN_IF_ERROR(tryPrint("JUMPIFNEQ ?print$write LF@type string@array\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS LF@value\n"));
+    RETURN_IF_ERROR(tryPrint("CALL $$list$toString\n"));
+    RETURN_IF_ERROR(tryPrint("POPS LF@value\n"));
+
+    // write the value
+    RETURN_IF_ERROR(tryPrint("LABEL ?print$write\n"));
     RETURN_IF_ERROR(tryPrint("WRITE LF@value\n"));
     RETURN_IF_ERROR(tryPrint("JUMP ?print$end\n"));
 
@@ -190,6 +201,7 @@ static int writeLibraryToStr(void)
     RETURN_IF_ERROR(tryPrint("JUMPIFEQ ?toStr$float LF@type string@float\n"));
     RETURN_IF_ERROR(tryPrint("JUMPIFEQ ?toStr$bool LF@type string@bool\n"));
     RETURN_IF_ERROR(tryPrint("JUMPIFEQ ?toStr$unit LF@type string@nil\n"));
+    RETURN_IF_ERROR(tryPrint("JUMPIFEQ ?toStr$list LF@type string@array\n"));
 
     // no jump worked so its already a string
     RETURN_IF_ERROR(tryPrint("PUSHS LF@value\n"));
@@ -214,6 +226,12 @@ static int writeLibraryToStr(void)
     RETURN_IF_ERROR(tryPrint("JUMP ?toStr$end\n"));
     RETURN_IF_ERROR(tryPrint("LABEL ?toStr$true\n"));
     RETURN_IF_ERROR(tryPrint("PUSHS string@true\n"));
+    RETURN_IF_ERROR(tryPrint("JUMP ?toStr$end\n"));
+
+    // list case, list makes its own text
+    RETURN_IF_ERROR(tryPrint("LABEL ?toStr$list\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS LF@value\n"));
+    RETURN_IF_ERROR(tryPrint("CALL $$list$toString\n"));
     RETURN_IF_ERROR(tryPrint("JUMP ?toStr$end\n"));
 
     // empty value is shown like ()

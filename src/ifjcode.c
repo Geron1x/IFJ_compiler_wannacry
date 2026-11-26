@@ -16,6 +16,7 @@
 #include "ast_internal.h"
 #include "ifjcode_expr.h"
 #include "ifjcode_lib.h"
+#include "ifjcode_lists.h"
 #include "operands.h"
 
 /** Gives the main function */
@@ -142,6 +143,7 @@ static bool givesValue(const astNode* node)
         case AST_EXPR_IF:
         case AST_EXPR_LAMBDA:
         case AST_EXPR_CALL_EXPR:
+        case AST_EXPR_LIST_LITERAL:
         // if gives a value even without else
         case AST_STAT_IF:
             return true;
@@ -395,6 +397,7 @@ static int generateCommand(const astNode* command, codegenContext* context)
         case AST_EXPR_IF:
         case AST_EXPR_LAMBDA:
         case AST_EXPR_CALL_EXPR:
+        case AST_EXPR_LIST_LITERAL:
             // just put the value on the stack
             return pushExpression(command, context);
 
@@ -642,6 +645,7 @@ int generateIfjcode(const astNode* program)
 
     // add our library at the end
     RETURN_IF_ERROR(writeLibrary());
+    RETURN_IF_ERROR(writeListLibrary());
 
     return ERROR_SUCCESS;
 }

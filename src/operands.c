@@ -254,6 +254,12 @@ static const char* getJumpLabelText(jumpLabelType type)
         case LABEL_LAMBDA_END:
             return "lambda$end";
 
+        case LABEL_CALL_LIST:
+            return "call$list";
+
+        case LABEL_CALL_END:
+            return "call$end";
+
         default:  // not in the list
             return NULL;
     }
