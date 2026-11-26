@@ -12,6 +12,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "ast_internal.h"
 #include "ifjcode.h"
@@ -375,6 +376,79 @@ static int pushListLiteral(const astNode* list, codegenContext* context)
     return ERROR_SUCCESS;
 }
 
+/** Calls the list function, its name is the same as the member */
+static int writeListCall(const char* name)
+{
+    RETURN_IF_ERROR(tryPrint("CALL $$list$"));
+    RETURN_IF_ERROR(tryPrint(name));
+
+    return tryPrint("\n");
+}
+
+/** Tells if we already have a list function for this member */
+static bool isListMember(const char* name)
+{
+    const char* members[] = {"head", "tail",  "take",
+                             "drop", "slice", "toString"};
+
+    // count how many names we have
+    size_t memberCount = sizeof(members) / sizeof(members[0]);
+
+    // look for the name in our list
+    for (size_t i = 0; i < memberCount; i++)
+    {
+        if (strcmp(name, members[i]) == 0)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/** Does the member of the list, like head or drop */
+static int pushMember(const astNode* member, codegenContext* context)
+{
+    // what member and on what list
+    const char* name = member->data.memberData.key;
+    const astNode* receiver = member->children[0];
+    size_t childCount = (size_t)member->childCount;
+
+    if (isListMember(name) == false)
+    {
+        return ERROR_INTERNAL;
+    }
+
+    // head is item on zero, zero goes before the list
+    bool isHead = (strcmp(name, "head") == 0);
+    if (isHead == true)
+    {
+        RETURN_IF_ERROR(tryPrint("PUSHS int@0\n"));
+        RETURN_IF_ERROR(pushExpression(receiver, context));
+        return writeListCall("get");
+    }
+
+    // put the list on stack
+    RETURN_IF_ERROR(pushExpression(receiver, context));
+
+    // take is slice from zero
+    bool isTake = (strcmp(name, "take") == 0);
+    if (isTake == true)
+    {
+        RETURN_IF_ERROR(tryPrint("PUSHS int@0\n"));
+        RETURN_IF_ERROR(pushExpression(member->children[1], context));
+        return writeListCall("slice");
+    }
+
+    // put all args and call the list function
+    for (size_t i = 1; i < childCount; i++)
+    {
+        RETURN_IF_ERROR(pushExpression(member->children[i], context));
+    }
+
+    return writeListCall(name);
+}
+
 /** Handles minus or plus before a number */
 static int pushUnary(const astNode* unary, codegenContext* context)
 {
@@ -450,6 +524,10 @@ int pushExpression(const astNode* expression, codegenContext* context)
 
         case AST_EXPR_LIST_LITERAL:
             RETURN_IF_ERROR(pushListLiteral(expression, context));
+            break;
+
+        case AST_EXPR_MEMBER:
+            RETURN_IF_ERROR(pushMember(expression, context));
             break;
 
         default:

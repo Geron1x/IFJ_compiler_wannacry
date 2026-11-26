@@ -155,12 +155,145 @@ static int writeListToString(void)
     return writeLibraryEnd();
 }
 
+/** Gives the part of the list from one index until another */
+static int writeListSlice(void)
+{
+    RETURN_IF_ERROR(writeLibraryStart("list$slice"));
+
+    // get all three params from stack
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@until\n"));
+    RETURN_IF_ERROR(tryPrint("POPS LF@until\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@from\n"));
+    RETURN_IF_ERROR(tryPrint("POPS LF@from\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@list\n"));
+    RETURN_IF_ERROR(tryPrint("POPS LF@list\n"));
+
+    // how long the list is
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@count\n"));
+    RETURN_IF_ERROR(tryPrint("ARRAYGET LF@count LF@list int@0\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@check\n"));
+
+    // start below zero, move it to zero
+    RETURN_IF_ERROR(tryPrint("LT LF@check LF@from int@0\n"));
+    RETURN_IF_ERROR(
+        tryPrint("JUMPIFEQ ?list$slice$fromOk LF@check bool@false\n"));
+    RETURN_IF_ERROR(tryPrint("MOVE LF@from int@0\n"));
+    RETURN_IF_ERROR(tryPrint("LABEL ?list$slice$fromOk\n"));
+
+    // end past the list, move it to the end
+    RETURN_IF_ERROR(tryPrint("GT LF@check LF@until LF@count\n"));
+    RETURN_IF_ERROR(
+        tryPrint("JUMPIFEQ ?list$slice$untilOk LF@check bool@false\n"));
+    RETURN_IF_ERROR(tryPrint("MOVE LF@until LF@count\n"));
+    RETURN_IF_ERROR(tryPrint("LABEL ?list$slice$untilOk\n"));
+
+    // end before start gives empty list
+    RETURN_IF_ERROR(tryPrint("LT LF@check LF@until LF@from\n"));
+    RETURN_IF_ERROR(
+        tryPrint("JUMPIFEQ ?list$slice$sizeOk LF@check bool@false\n"));
+    RETURN_IF_ERROR(tryPrint("MOVE LF@until LF@from\n"));
+    RETURN_IF_ERROR(tryPrint("LABEL ?list$slice$sizeOk\n"));
+
+    // new list, length goes in first cell
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@newCount\n"));
+    RETURN_IF_ERROR(tryPrint("SUB LF@newCount LF@until LF@from\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@size\n"));
+    RETURN_IF_ERROR(tryPrint("ADD LF@size LF@newCount int@1\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@result\n"));
+    RETURN_IF_ERROR(tryPrint("NEWARRAY LF@result LF@size\n"));
+    RETURN_IF_ERROR(tryPrint("ARRAYSET LF@result int@0 LF@newCount\n"));
+
+    // make all variables before the loop
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@oldIndex\n"));
+    RETURN_IF_ERROR(tryPrint("ADD LF@oldIndex LF@from int@1\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@newIndex\n"));
+    RETURN_IF_ERROR(tryPrint("MOVE LF@newIndex int@1\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@item\n"));
+
+    // stop when we copied all
+    RETURN_IF_ERROR(tryPrint("LABEL ?list$slice$loop\n"));
+    RETURN_IF_ERROR(tryPrint("GT LF@check LF@newIndex LF@newCount\n"));
+    RETURN_IF_ERROR(tryPrint("JUMPIFEQ ?list$slice$done LF@check bool@true\n"));
+
+    // take item and put it in new list
+    RETURN_IF_ERROR(tryPrint("ARRAYGET LF@item LF@list LF@oldIndex\n"));
+    RETURN_IF_ERROR(tryPrint("ARRAYSET LF@result LF@newIndex LF@item\n"));
+
+    // both counters go next
+    RETURN_IF_ERROR(tryPrint("ADD LF@oldIndex LF@oldIndex int@1\n"));
+    RETURN_IF_ERROR(tryPrint("ADD LF@newIndex LF@newIndex int@1\n"));
+    RETURN_IF_ERROR(tryPrint("JUMP ?list$slice$loop\n"));
+
+    // new list goes on stack
+    RETURN_IF_ERROR(tryPrint("LABEL ?list$slice$done\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS LF@result\n"));
+
+    return writeLibraryEnd();
+}
+
+/** Throws away first items of the list */
+static int writeListDrop(void)
+{
+    RETURN_IF_ERROR(writeLibraryStart("list$drop"));
+
+    // get both params from stack
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@number\n"));
+    RETURN_IF_ERROR(tryPrint("POPS LF@number\n"));
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@list\n"));
+    RETURN_IF_ERROR(tryPrint("POPS LF@list\n"));
+
+    // how long the list is
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@count\n"));
+    RETURN_IF_ERROR(tryPrint("ARRAYGET LF@count LF@list int@0\n"));
+
+    // drop is just slice from that number till the end
+    RETURN_IF_ERROR(tryPrint("PUSHS LF@list\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS LF@number\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS LF@count\n"));
+    RETURN_IF_ERROR(tryPrint("CALL $$list$slice\n"));
+
+    return writeLibraryEnd();
+}
+
+/** Gives the list without the first item */
+static int writeListTail(void)
+{
+    RETURN_IF_ERROR(writeLibraryStart("list$tail"));
+
+    // take the list from stack
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@list\n"));
+    RETURN_IF_ERROR(tryPrint("POPS LF@list\n"));
+
+    // check if list is empty
+    RETURN_IF_ERROR(tryPrint("DEFVAR LF@count\n"));
+    RETURN_IF_ERROR(tryPrint("ARRAYGET LF@count LF@list int@0\n"));
+    RETURN_IF_ERROR(tryPrint("JUMPIFEQ ?list$tail$bad LF@count int@0\n"));
+
+    // throw away first item
+    RETURN_IF_ERROR(tryPrint("PUSHS LF@list\n"));
+    RETURN_IF_ERROR(tryPrint("PUSHS int@1\n"));
+    RETURN_IF_ERROR(tryPrint("CALL $$list$drop\n"));
+    RETURN_IF_ERROR(tryPrint("JUMP ?list$tail$end\n"));
+
+    // empty list stops the program
+    RETURN_IF_ERROR(tryPrint("LABEL ?list$tail$bad\n"));
+    RETURN_IF_ERROR(tryPrint("EXIT int@40\n"));
+
+    // end
+    RETURN_IF_ERROR(tryPrint("LABEL ?list$tail$end\n"));
+
+    return writeLibraryEnd();
+}
+
 /** Prints all functions for lists */
 int writeListLibrary(void)
 {
     RETURN_IF_ERROR(writeListMake());
     RETURN_IF_ERROR(writeListGet());
     RETURN_IF_ERROR(writeListToString());
+    RETURN_IF_ERROR(writeListSlice());
+    RETURN_IF_ERROR(writeListDrop());
+    RETURN_IF_ERROR(writeListTail());
 
     return ERROR_SUCCESS;
 }
