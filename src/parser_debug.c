@@ -35,7 +35,7 @@ static void dumpLiteral(const astNode* node)
     switch (node->retType)
     {
         case S_TYPE_INT:
-            fprintf(stderr, " %d", node->data.intVal);
+            fprintf(stderr, " %lld", node->data.intVal);
             break;
         case S_TYPE_DOUBLE:
             fprintf(stderr, " %g", node->data.doubleVal);

@@ -361,9 +361,8 @@ static int precCreateLiteral(const Token* tok, astNode** out)
 {
     switch (tok->type)
     {
-        // Token keeps long long, the tree keeps int, spec needs no range check
         case TYPE_INT_LITERAL:
-            return astCreateLiteralInt((int)tok->value.numberInt, out);
+            return astCreateLiteralInt(tok->value.numberInt, out);
         case TYPE_DOUBLE_LITERAL:
             return astCreateLiteralDouble(tok->value.numberFloat, out);
         case TYPE_STRING_LITERAL:
